@@ -33,8 +33,15 @@ export async function sendCustomerMail(store,key,kind,data,attachments=[],transp
   const allowed = new Set(['EAUTH','ETIMEDOUT','ECONNECTION','ECONNRESET','ECONNREFUSED','EDNS','ENOTFOUND','EENVELOPE','EMESSAGE','ESOCKET','ETLS']);
   const code = allowed.has(error?.code) ? error.code : 'UNKNOWN';
   const smtp = Number.isInteger(error?.responseCode) && error.responseCode >= 400 && error.responseCode <= 599 ? error.responseCode : null;
-  const stage = ['CONN','AUTH','MAIL FROM','RCPT TO','DATA'].includes(error?.command) ? error.command : 'UNKNOWN';
-  const diagnostic = `code=${code}; smtp=${smtp ?? 'unknown'}; stage=${stage}`;
+  const command = String(error?.command || '');
+  const stage = /^AUTH(?: |$)/.test(command) ? 'AUTH' : (['CONN','MAIL FROM','RCPT TO','DATA'].includes(command) ? command : 'UNKNOWN');
+  // Extract only a numeric status and fixed labels. Never expose raw replies or credentials.
+  const reply = String(error?.response || '');
+  const enhanced = reply.match(/(?:^|\s)5\.\d{1,3}\.\d{1,3}(?=\s|$)/)?.[0].trim() || 'unknown';
+  const reason = /application[- ]specific password required|InvalidSecondFactor/i.test(reply) ? 'APP_PASSWORD_REQUIRED'
+    : /log in (?:with|via) your web browser|Please log in|web browser.*try again/i.test(reply) ? 'GOOGLE_BROWSER_LOGIN_REQUIRED'
+    : /Username and Password not accepted|BadCredentials/i.test(reply) ? 'CREDENTIALS_REJECTED' : 'UNKNOWN';
+  const diagnostic = `diagnostic=v2; code=${code}; smtp=${smtp ?? 'unknown'}; enhanced=${enhanced}; stage=${stage}; reason=${reason}`;
   // Do not retry blindly: SMTP may have accepted a message before the connection failed.
   await store.setJSON(claimKey,{status:'needs-review',kind,at:new Date().toISOString(),error:'Verzending niet bevestigd; '+diagnostic});
   throw Error('E-mailverzending niet bevestigd. '+diagnostic);
