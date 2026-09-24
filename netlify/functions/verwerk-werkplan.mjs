@@ -1,3 +1,4 @@
+import { sendCustomerMail } from './lib/customer-mail.mjs';
 import { getStore } from "@netlify/blobs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { reserveGeneration } from "./lib/daily-limit.mjs";
@@ -50,6 +51,12 @@ export default async (req) => {
 
   const claim=await store.setJSON(`claims/${id}.json`,{createdAt},{onlyIfNew:true});
   if(!claim.modified) return;
+  try {
+    const mail = await sendCustomerMail(store, 'intake-'+id, 'intake', data);
+    console.log('Intakebevestiging', mail.status);
+  } catch (error) {
+    console.error('Intakebevestiging mislukt', error.message);
+  }
   try {
     await store.setJSON(`jobs/${id}.json`,{id,createdAt,opvangnaam:data.opvangnaam||"",status:"bezig"});
     console.log("Werkplan-generatie in achtergrond gestart");

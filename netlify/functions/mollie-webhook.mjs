@@ -1,6 +1,15 @@
+import { sendCustomerMail } from './lib/customer-mail.mjs';
+import { buildTestInvoice } from './lib/invoice.mjs';
 import { getStore } from '@netlify/blobs';
 import { sanitize } from './lib/admin-core.mjs';
 import { mollieCall,verifyPayment,applyStatus } from './lib/mollie.mjs';
+async function notifyPaid(store, record, payment) {
+ if(record.payment!=='betaald'||payment.status!=='paid')return;
+ const attachments=payment.mode==='test'?[{filename:'testfactuur.pdf',content:await buildTestInvoice(record),contentType:'application/pdf'}]:[];
+ const recipientData=payment.mode==='test'?{...record,email:'opvangwerkplan@gmail.com',testPayment:true}:record;
+ try{await sendCustomerMail(store,'payment-'+payment.id,'payment',recipientData,attachments);}
+ catch(error){console.error('Betaalbevestiging mislukt',error.message);}
+}
 const ok=new Response('OK',{status:200,headers:{'content-type':'text/plain','cache-control':'no-store'}});
 export function createWebhookHandler(storeFactory=()=>getStore({name:'opvangwerkplan-concepten',consistency:'strong'}),provider=mollieCall){
  return async req=>{
@@ -18,8 +27,8 @@ export function createWebhookHandler(storeFactory=()=>getStore({name:'opvangwerk
     const entry=await store.getWithMetadata(key,{type:'json'});if(!entry)return ok;
     if(entry.data.mollie?.id!==paymentId)return ok;
     const next=applyStatus(entry.data,payment);
-    if(entry.data.mollie.status===next.mollie.status&&entry.data.payment===next.payment)return ok;
-    const result=await store.setJSON(key,next,{onlyIfMatch:entry.etag});if(result.modified)return ok;
+    if(entry.data.mollie.status===next.mollie.status&&entry.data.payment===next.payment){await notifyPaid(store,next,payment);return ok;}
+    const result=await store.setJSON(key,next,{onlyIfMatch:entry.etag});if(result.modified){await notifyPaid(store,next,payment);return ok;}
    }
    throw Error('Gelijktijdige update verhinderde de statuswijziging.');
   }catch(e){console.error('Mollie webhook',sanitize(e.message));return new Response('Tijdelijk niet verwerkt',{status:503});}

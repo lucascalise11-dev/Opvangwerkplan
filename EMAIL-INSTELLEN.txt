@@ -1,0 +1,34 @@
+OPVANGWERKPLAN v6.3 — e-mail en factuuropmaak
+
+Wat werkt na koppeling:
+- Intakebevestiging vanuit opvangwerkplan@gmail.com zodra de achtergrondverwerking begint.
+- Betaalbevestiging na door Mollie gecontroleerde betaling via de webhook.
+- Bij Mollie-testbetalingen: uitsluitend naar de beheerder, met TEST in onderwerp en een PDF-testfactuur.
+- Herhaalde webhookaanroepen versturen niet opnieuw dezelfde bevestiging.
+- Mailfouten stoppen de generatie en betaalregistratie niet.
+
+INSTELLEN
+1. Open Google-account opvangwerkplan@gmail.com en activeer tweestapsverificatie.
+2. Maak op https://myaccount.google.com/apppasswords een app-wachtwoord voor Opvangwerkplan.
+3. Plaats dit uitsluitend in Netlify Environment variables als GMAIL_APP_PASSWORD (Functions / Production).
+   Gebruik nooit je gewone Gmail-wachtwoord. Deel het app-wachtwoord niet in chat of GitHub.
+4. Voeg MAIL_MODE toe met waarde test. In deze stand ontvangt alleen opvangwerkplan@gmail.com berichten.
+5. Upload de gewijzigde v6.3-projectbestanden naar dezelfde GitHub-repository en commit.
+   Geen node_modules, geheimen of zipbestand uploaden; behoud netlify/functions/submission-created.mjs.
+6. Wacht op Published. Verstuur één testintake en controleer Gmail (ook spam).
+7. Test daarna een Mollie-testbetaling. Die blijft ook met MAIL_MODE=live naar de beheerder gaan.
+8. Na geslaagde verzendtest: zet MAIL_MODE op live en deploy opnieuw voor echte intakebevestigingen.
+
+Voorbeelden staan in voorbeelden/: intakebevestiging.html, betaalbevestiging.html, testfactuur.pdf.
+De voorbeeldenmap wordt niet naar de publieke website gekopieerd.
+
+NOG OPEN VOOR ECHTE FACTUREN
+De PDF is een ontwerp/testfactuur, geen fiscale factuur. Het voorbeeld gebruikt ter illustratie 21% btw.
+Vóór echte facturatie: btw-behandeling vaststellen, bedrijfs-/klantfactuurgegevens vastleggen,
+KvK en btw-id invullen en een blijvende, unieke factuurnummerreeks implementeren.
+Live betaalbevestigingen hebben daarom voorlopig GEEN factuurbijlage.
+
+Mailstatus staat in Netlify Blobs onder mail/. Bij needs-review: controleer eerst Verzonden in Gmail.
+Een onzekere SMTP-uitkomst wordt niet automatisch herhaald om dubbele mails te voorkomen.
+Er is nog geen automatische mailherstelknop. Oude inzendingen krijgen niet met terugwerkende kracht mail.
+Gmail kan serververzending blokkeren of begrenzen; de lokale tests vervangen geen echte verzendtest.
