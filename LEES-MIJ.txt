@@ -1,0 +1,60 @@
+OPVANGWERKPLAN V6.1 – BEWERKEN EN AFRONDEN
+
+Begin bij LANCERING.md. De checklist is ook te openen als lancering.html.
+Deze versie staat nog niet automatisch live. Dit pakket bevat broncode plus dist/ als gebouwde voorbereidingswebsite.
+
+INSTALLEREN EN PUBLICEREN
+Pak de ZIP uit. Gebruik dezelfde Netlify-site: helpful-clafoutis-43c7b2.
+Laat OPENAI_API_KEY en ADMIN_TOKEN staan.
+
+Gebruik een deployment die de build EN Netlify Functions verwerkt:
+- Als de site aan Git gekoppeld is: werk de bronbestanden bij, commit/push en laat Netlify bouwen.
+  Build command: npm run build
+  Publish directory: dist
+  Functions directory: netlify/functions
+- Zonder Git: open een terminal in de uitgepakte map, met Node.js 22 of nieuwer:
+  npm ci
+  npx netlify-cli login
+  npx netlify-cli link
+  Kies de bestaande site, geen nieuw project.
+  npx netlify-cli deploy --build --prod
+
+De Netlify-interface kent meerdere uploadroutes. Een gewone upload van alleen dist/ werkt de serverfuncties niet betrouwbaar bij. Gebruik daarom een buildroute die ook de functies verwerkt.
+Controleer in de buildlog dat zowel de website als genereer-werkplan, verwerk-werkplan (achtergrond) en concepten worden gepubliceerd.
+
+NA PUBLICEREN
+1. Open /admin.html en log in. Oude werkplannen moeten zichtbaar blijven.
+2. Open een testwerkplan, pas tekst aan en sla op.
+3. Werk controlepunten af; bevestig controle en werkelijk klantakkoord.
+4. Maak/download de definitieve PDF.
+5. Test één nieuwe fictieve intake zonder beleidsbestand en één met een PDF.
+6. Controleer beide formuliermeldingen in Netlify: werkplan-aanvragen en werkplan-intake.
+7. Controleer de actuele functielog bij fouten.
+
+BEDRIJFSGEGEVENS
+site-config.json is de centrale plek voor je definitieve gegevens.
+launchReady blijft false tijdens voorbereiding.
+De handelsnaam Opvangwerkplan, zakelijke e-mail, telefoon en het beoogde domein opvangwerkplan.nl zijn ingevuld.
+Adres, KvK, btw-id en exacte juridische naam ontbreken nog. Het adres uit het KvK-scherm is bewust niet op de website gezet.
+Lees LANCERING.md voordat je de drie reviewbevestigingen op true zet.
+
+LOKAAL TESTEN
+npm run build
+npm run test:generator
+npm run test:admin
+npm run test:payment
+npm run test:pdf
+
+HERSTELLEN
+Bewaar v5.3. Bij een probleem kan in Netlify de eerdere werkende deploy worden teruggezet.
+Nieuwe bewerkingen blijven in dezelfde Blobs-store staan. Oudere code begrijpt niet alle v6-statusvelden of nieuwe PDF-paden; gebruik v6 weer zodra het deploymentprobleem verholpen is.
+Een rollback van de website zet klantgegevens niet terug.
+
+E-MAIL
+De mailknoppen openen concepten in je eigen mailprogramma en versturen niets zelfstandig.
+Voeg PDF/factuur toe en controleer ontvanger en tekst vóór verzending.
+
+MOLLIE TESTEN
+Zie LANCERING.md voor de concrete teststappen en de vier environment variables.
+Standaard is MOLLIE_MODE=off. TEST en LIVE zijn apart en een testbetaling levert nooit geld op.
+De bestaande intake blijft vrijblijvend; een betaallink wordt pas na persoonlijk akkoord gemaakt.

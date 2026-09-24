@@ -1,0 +1,17 @@
+{
+  "name": "opvangwerkplan-netlify",
+  "version": "6.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test:generator": "node scripts/test-generator.mjs",
+    "test:pdf": "node scripts/test-pdf.mjs",
+    "test:admin": "node scripts/test-admin.mjs",
+    "test:payment": "node scripts/test-payment.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.0.10",
+    "pdfkit": "^0.17.2"
+  }
+}

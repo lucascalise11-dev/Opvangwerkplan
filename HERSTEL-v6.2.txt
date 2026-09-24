@@ -1,0 +1,8 @@
+v6.2: formuliertrigger vervangen door de ondersteunde submission-created-bestandsnaam.
+Dit is een compatibiliteitswijziging; de oorzaak is nog niet definitief vastgesteld.
+Deploy het volledige project inclusief netlify/functions via een Netlify-build of CLI.
+Alleen de dist-map slepen publiceert deze functie niet.
+Controleer na deployment dat submission-created bij Functions staat.
+Een oude Forms-inzending wordt door deze deployment niet opnieuw verwerkt.
+Bewaar de bestaande inzending. Controleer de nieuwe koppeling met één nieuwe testintake.
+Bekijk daarna de logs van submission-created en verwerk-werkplan.
