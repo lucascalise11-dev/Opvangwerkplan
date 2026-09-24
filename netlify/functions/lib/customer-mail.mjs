@@ -29,8 +29,14 @@ export async function sendCustomerMail(store,key,kind,data,attachments=[],transp
   await store.setJSON(claimKey,{status:'sent',kind,at:new Date().toISOString()});
   return {status:'sent'};
  }catch(error){
+  // Only allow known error codes and numeric SMTP status; never log raw SMTP replies.
+  const allowed = new Set(['EAUTH','ETIMEDOUT','ECONNECTION','ECONNRESET','ECONNREFUSED','EDNS','ENOTFOUND','EENVELOPE','EMESSAGE','ESOCKET','ETLS']);
+  const code = allowed.has(error?.code) ? error.code : 'UNKNOWN';
+  const smtp = Number.isInteger(error?.responseCode) && error.responseCode >= 400 && error.responseCode <= 599 ? error.responseCode : null;
+  const stage = ['CONN','AUTH','MAIL FROM','RCPT TO','DATA'].includes(error?.command) ? error.command : 'UNKNOWN';
+  const diagnostic = `code=${code}; smtp=${smtp ?? 'unknown'}; stage=${stage}`;
   // Do not retry blindly: SMTP may have accepted a message before the connection failed.
-  await store.setJSON(claimKey,{status:'needs-review',kind,at:new Date().toISOString(),error:'Verzending niet bevestigd; controleer Gmail en instellingen.'});
-  throw Error('E-mailverzending niet bevestigd. Controleer Gmail en de mailinstellingen.');
+  await store.setJSON(claimKey,{status:'needs-review',kind,at:new Date().toISOString(),error:'Verzending niet bevestigd; '+diagnostic});
+  throw Error('E-mailverzending niet bevestigd. '+diagnostic);
  }
 }
