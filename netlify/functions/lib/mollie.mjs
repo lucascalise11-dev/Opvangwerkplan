@@ -1,7 +1,9 @@
+import {environmentInfo} from './environment.mjs';
 const BASE='https://api.mollie.com/v2/payments';
 export const PRICE='49.00';
-export function paymentMode(){const mode=process.env.MOLLIE_MODE||'off';if(!['off','test','live'].includes(mode))throw Error('MOLLIE_MODE is ongeldig.');return mode;}
+export function paymentMode(){const mode=process.env.MOLLIE_MODE||'off';if(mode==='live'&&!environmentInfo().production)throw Error('Live betalingen zijn geblokkeerd in de testomgeving.');if(!['off','test','live'].includes(mode))throw Error('MOLLIE_MODE is ongeldig.');return mode;}
 function keyFor(mode){
+ if(mode==='live'&&!environmentInfo().production)throw Error('Live Mollie-aanroepen geblokkeerd in test.');
  const key=mode==='test'?process.env.MOLLIE_TEST_API_KEY:mode==='live'?process.env.MOLLIE_LIVE_API_KEY:'';
  if(mode==='live'&&process.env.LIVE_PAYMENTS_APPROVED!=='yes')throw Error('Live betalingen zijn nog niet vrijgegeven.');
  if(!key||!key.startsWith(mode+'_'))throw Error('De Mollie '+mode+'-sleutel ontbreekt of hoort bij een andere modus.');

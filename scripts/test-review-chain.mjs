@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {createRevisionHandler} from '../netlify/functions/revisies.mjs';
+import {createWorker} from '../netlify/functions/revisie-worker.mjs';
+import {issueReviewToken,verifyReviewToken} from '../netlify/functions/lib/review-token.mjs';
+import {verifyToken,issueToken} from '../netlify/functions/lib/intake-token.mjs';
+process.env.ADMIN_TOKEN='local-review-secret-not-a-real-key';process.env.OPENAI_API_KEY='local-not-used';process.env.AI_TEST_PROCESSING_APPROVED='yes';
+const id='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';let seq=0,calls=0;const db=new Map(),prod=new Map([['records/'+id+'.json',{text:'unchanged production'}]]);
+const store={get:async k=>db.get(k)?.data||null,getWithMetadata:async k=>db.get(k)||null,setJSON:async(k,v,o={})=>{if(o.onlyIfNew&&db.has(k)||o.onlyIfMatch&&o.onlyIfMatch!==db.get(k)?.etag)return {modified:false};const etag=String(++seq);db.set(k,{data:structuredClone(v),etag});return {modified:true,etag}},set:async()=>{},delete:async k=>db.delete(k)};
+await store.setJSON('records/'+id+'.json',{id,naam:'Fictieve gastouder',opvangnaam:'Bij Abuela',email:'test@example.com',payment:'onbetaald',controlepunten:['Beleid ontbreekt'],checked:[false]});
+const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('No server-side HTTP dispatch may occur');};
+const api=createRevisionHandler(()=>store);const post=(action='questions',extra={})=>new Request('https://preview.example/revisies?id='+id,{method:'POST',headers:{'x-admin-token':process.env.ADMIN_TOKEN,'content-type':'application/json'},body:JSON.stringify({action,version:db.get('records/'+id+'.json').etag,privacyConfirmed:true,...extra})});
+let response=await api(post());assert.equal(response.status,202);const task=await response.json();assert.equal(task.worker,'/.netlify/functions/revisie-worker');assert(!task.taskToken.includes(process.env.ADMIN_TOKEN));
+const resumed=await(await api(post())).json();assert.equal(resumed.jobId,task.jobId);assert.equal(resumed.resumed,true);assert.equal([...db.keys()].filter(k=>k.startsWith('review-jobs/')).length,1);
+assert(verifyReviewToken(task.task,task.taskToken));for(const change of [{id:other},{jobId:other},{kind:'corrections'},{version:'changed'}])assert(!verifyReviewToken({...task.task,...change},task.taskToken));assert(!verifyReviewToken(task.task,issueToken(id)));assert(!verifyToken(id,task.taskToken));
+const output={questions:[{id:'beleid',question:'Kunt u het actuele beleidsplan aanleveren?',checkIndices:[0]}],changes:[],answers:[]};
+const worker=createWorker(()=>store,async()=>{calls++;return output;});const request=(data={})=>new Request('https://preview.example/revisie-worker',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...task.task,taskToken:task.taskToken,...data})});
+assert.equal((await worker(request({taskToken:'invalid'}))).status,401);assert.equal(calls,0);
+await worker(request());assert.equal(calls,1);await worker(request());assert.equal(calls,1);
+let r=await store.get('records/'+id+'.json');assert(r.questionDraft.text.startsWith('Beste Fictieve gastouder,'));assert(r.questionDraft.text.includes('beleidsplan'));assert.equal(r.payment,'onbetaald');assert(!r.customerApproved);assert.deepEqual(r.checked,[false]);
+const state=await(await api(new Request('https://preview.example/revisies?id='+id+'&job='+task.jobId,{headers:{'x-admin-token':process.env.ADMIN_TOKEN}}))).json();assert.equal(state.status,'gereed');
+// A changed record invalidates the task instead of overwriting the latest text.
+const next=await(await api(post())).json();await store.setJSON('records/'+id+'.json',{...r,opvangnaam:'Handmatig gewijzigd'});
+await worker(new Request('https://preview.example/revisie-worker',{method:'POST',body:JSON.stringify({...next.task,taskToken:next.taskToken})}));assert.equal(calls,1);assert.equal((await store.get(`review-jobs/${id}/${next.jobId}.json`)).status,'fout');assert.equal((await store.get('records/'+id+'.json')).opvangnaam,'Handmatig gewijzigd');
+assert.equal(prod.get('records/'+id+'.json').text,'unchanged production');globalThis.fetch=originalFetch;
+console.log('PASS review chain: authenticated prepare, no internal HTTP, resume same task, scoped/tamper-resistant tokens, one execution, generated editable email, visible status, concurrent-edit protection, production unchanged. AI and storage simulated.');

@@ -1,3 +1,4 @@
+process.env.AI_TEST_PROCESSING_APPROVED="yes";
 import assert from 'node:assert/strict';
 import {fields} from '../netlify/functions/lib/admin-core.mjs';
 import {applyChanges,validateAnalysis,questionMail,snapshot} from '../netlify/functions/lib/revision-core.mjs';
@@ -8,7 +9,7 @@ const feedback='De opvangdagen zijn maandag t/m donderdag. Vier kinderen tegelij
 const record={id,naam:'Fictieve gastouder',email:'voorbeeld@example.com',opvangnaam:'Bij Abuela',packageId:'starter',status:'concept',payment:'onbetaald',...Object.fromEntries(fields.map(f=>[f,'Bestaande fictieve informatie.'])),intake:{opvangdagen:'maandag en dinsdag',groep_omvang:'vier'},controlepunten:['Groepsomvang bevestigen','Beleidsplan ontbreekt','Privacyafspraken ontbreken'],checked:[false,false,false],customerApproved:false};record.opvangnaam='Bij Abuela';
 const result={questions:[{id:'beleid',question:'Kunt u het actuele beleidsplan aanleveren?',checkIndices:[1]},{id:'privacy',question:'Welke afspraken heeft u over het vastleggen van de ontwikkeling?',checkIndices:[2]}],changes:[{field:'opvang',proposed:'Ik bied opvang van maandag t/m donderdag aan vier kinderen tegelijk. Bestaande overige informatie blijft van toepassing.',evidence:'De opvangdagen zijn maandag t/m donderdag.',manualReview:false},{field:'werkwijze',proposed:'We doen twee wenmomenten. Bestaande fictieve informatie.',evidence:'We doen twee wenmomenten.',manualReview:false}],answers:[{checkIndex:0,status:'beantwoord',explanation:'De klant bevestigt vier kinderen.'},{checkIndex:1,status:'ontbreekt',explanation:'Beleid volgt later.'},{checkIndex:2,status:'onvoldoende',explanation:'Privacyafspraken zijn nog niet vastgesteld.'}]};
 validateAnalysis(result,record,feedback);assert.throws(()=>validateAnalysis({...result,changes:[{...result.changes[0],evidence:'Verzonnen citaat'}]},record,feedback));
-const mail=questionMail(record,result.questions);assert(mail.startsWith('Beste Fictieve gastouder,'));assert(mail.endsWith('Luca\nopvangwerkplan@gmail.com'));assert(!mail.includes('Hoeveel kinderen'));
+const mail=questionMail(record,result.questions);assert(mail.startsWith('Beste Fictieve gastouder,'));assert(mail.endsWith('Luca\nOpvangWerkPlan'));assert(!mail.includes('Hoeveel kinderen'));
 const next=applyChanges(record,result,['opvang','werkwijze']);assert.equal(next.correctionsUsed,1);assert.equal(next.bureau_beleid,record.bureau_beleid);assert.equal(next.ontwikkeling,record.ontwikkeling);assert.deepEqual(next.controlepunten,record.controlepunten);assert.deepEqual(next.checked,[false,false,false]);assert.equal(next.customerApproved,false);assert.equal(next.payment,'onbetaald');assert.equal(next.status,'concept');
 assert.throws(()=>applyChanges(next,result,['opvang']));assert.throws(()=>applyChanges(record,result,[]));assert.throws(()=>applyChanges(record,{...result,changes:[{...result.changes[0],manualReview:true}]},['opvang']));
 const complete={...record,packageId:'compleet',correctionsUsed:1};assert.equal(applyChanges(complete,result,['werkwijze']).correctionsUsed,2);assert.throws(()=>applyChanges({...complete,correctionsUsed:2},result,['opvang']));
@@ -20,7 +21,7 @@ const handler=createRevisionHandler(()=>store,async b=>{job=b;});
 const req=(action,extra={},token=process.env.ADMIN_TOKEN)=>new Request('https://example.test/api?id='+id,{method:'POST',headers:{'x-admin-token':token,'content-type':'application/json'},body:JSON.stringify({action,version:db.get('records/'+id+'.json').etag,...extra})});
 assert.equal((await handler(req('analyse',{feedback,privacyConfirmed:true},'wrong'))).status,401);
 assert.equal((await handler(req('analyse',{feedback,privacyConfirmed:false}))).status,400);
-let response=await handler(req('analyse',{feedback,privacyConfirmed:true}));assert.equal(response.status,202);assert(job);
+let response=await handler(req('analyse',{feedback,privacyConfirmed:true}));assert.equal(response.status,202);const start=await response.json();job={...start.task,taskToken:start.taskToken};assert(job);
 const worker=createWorker(()=>store,async(r,f)=>{assert.equal(r.id,id);assert.equal(f,feedback);return structuredClone(result);});
 await worker(new Request('https://example.test/worker',{method:'POST',headers:{'x-admin-token':process.env.ADMIN_TOKEN},body:JSON.stringify(job)}));
 let saved=await store.get('records/'+id+'.json');assert.equal(saved.workflowStatus,'Correcties ter goedkeuring');assert.equal(saved.correctionsUsed,undefined);
@@ -29,9 +30,8 @@ response=await handler(req('apply',{selected:['opvang','werkwijze'],kind:'correc
 assert.equal((await handler(req('apply',{selected:['opvang']}))).status,409);
 const otherKey='versions/22222222-2222-4222-8222-222222222222/test.json';assert.equal((await handler(new Request('https://example.test/api?id='+id+'&versionKey='+otherKey,{headers:{'x-admin-token':process.env.ADMIN_TOKEN}}))).status,404);
 console.log('PASS Bij Abuela: approved days/wennen, four children answered, policy/privacy open, selective changes, versions/exports, rounds/updates, no payment/approval, auth/isolation, background worker, mail off. All providers mocked; no external AI/mail calls.');
-// SMTP is injected: these checks never connect to Gmail.
+// A preview cannot send even with accidentally inherited live Gmail settings.
 process.env.MAIL_MODE='live';process.env.GMAIL_APP_PASSWORD='local-only-fixture';let sent=0;
 const mailHandler=createRevisionHandler(()=>store,async()=>{},async()=>{sent++;});
-let latest=await store.getWithMetadata('records/'+id+'.json');await store.setJSON('records/'+id+'.json',{...latest.data,questionDraft:{id:'mail-fixture',questions:result.questions,text:mail}});
-let responseMail=await mailHandler(req('sendMail'));assert.equal(responseMail.status,200);assert.equal(sent,1);assert.equal((await store.get('records/'+id+'.json')).sentQuestions.length,1);assert.equal((await mailHandler(req('sendMail'))).status,409);assert.equal(sent,1);
-console.log('PASS mail mock: history/date stored; waiting-for-client status; duplicate send blocked.');
+assert.equal((await mailHandler(req('sendMail'))).status,409);assert.equal(sent,0);
+console.log('PASS inherited live Gmail settings cannot send in test.');

@@ -1,3 +1,4 @@
+process.env.AI_TEST_PROCESSING_APPROVED="yes";
 process.env.AI_PROCESSING_APPROVED="yes";
 import { generateWorkplan } from "../netlify/functions/lib/generator.mjs";
 

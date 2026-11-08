@@ -20,7 +20,7 @@ export function validateAnalysis(result,record,feedback=''){
  return result;
 }
 export function questionMail(r,questions){
- return `Beste ${String(r.naam||'gastouder').replace(/[\r\n]/g,' ')},\n\nBedankt voor het invullen van de intake voor uw pedagogisch werkplan. Om uw werkplan zorgvuldig af te ronden, hebben wij nog enkele aanvullende vragen.\n\n${questions.map((q,i)=>`${i+1}. ${q.question}`).join('\n\n')}\n\nAlvast hartelijk dank voor uw reactie.\n\nMet vriendelijke groet,\n\nLuca\nopvangwerkplan@gmail.com`;
+ return `Beste ${String(r.naam||'gastouder').replace(/\s+/g,' ').trim()},\n\nBedankt voor het invullen van de intake voor uw pedagogisch werkplan. Om uw werkplan zorgvuldig af te ronden, hebben wij nog enkele aanvullende vragen.\n\n${questions.map((q,i)=>`${i+1}. ${q.question}`).join('\n\n')}\n\nAlvast hartelijk dank voor uw reactie.\n\nMet vriendelijke groet,\nLuca\nOpvangWerkPlan`;
 }
 export function applyChanges(record,proposal,selected,{kind='correction',manualConfirmed=false}={}){
  if(!['correction','actualisatie'].includes(kind))throw Error('Kies correctie of actualisatie.');

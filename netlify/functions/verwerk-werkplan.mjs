@@ -1,6 +1,6 @@
 import {packageFor} from './lib/packages.mjs';
 import { sendCustomerMail } from './lib/customer-mail.mjs';
-import { getStore } from "@netlify/blobs";
+import {getAppStore} from './lib/environment.mjs';
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { reserveGeneration } from "./lib/daily-limit.mjs";
 import { generateWorkplan } from "./lib/generator.mjs";
@@ -46,10 +46,13 @@ export default async (req) => {
     return;
   }
 
+  return processIntake(data,requestedId);
+};
+
+// Shared processing: the signed Netlify form event calls this directly, without HTTP.
+export async function processIntake(data,requestedId,store=getAppStore()){
   const id = /^[0-9a-f-]{36}$/i.test(requestedId||"") ? requestedId : randomUUID();
   const createdAt = new Date().toISOString();
-  const store = getStore({ name: "opvangwerkplan-concepten", consistency: "strong" });
-
   const claim=await store.setJSON(`claims/${id}.json`,{createdAt},{onlyIfNew:true});
   if(!claim.modified) return;
   try {
@@ -87,7 +90,7 @@ export default async (req) => {
     });
     await store.setJSON(`records/${id}.json`, record, { onlyIfNew:true });
     await store.delete(`jobs/${id}.json`);
-    console.log(`Concept ${id} gegenereerd voor ${record.opvangnaam}`);
+    console.log(`Concept ${id} gegenereerd`);
   } catch (error) {
     const veilig = veiligeFoutmelding(error);
     console.error("Werkplan genereren mislukt", veilig);
@@ -106,4 +109,4 @@ export default async (req) => {
       console.error("Generatiefout kon niet in Blobs worden opgeslagen", veiligeFoutmelding(storageError));
     }
   }
-};
+}

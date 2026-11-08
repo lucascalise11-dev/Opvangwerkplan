@@ -1,81 +1,21 @@
+import {createHash,randomUUID} from 'node:crypto';
+import {getAppStore,environmentInfo} from './lib/environment.mjs';
 import {packageFor} from './lib/packages.mjs';
-import { getStore } from "@netlify/blobs";
-import { randomUUID } from "node:crypto";
+import {processIntake} from './verwerk-werkplan.mjs';
 
-function intakeHerkennen(data) {
-  const marker = String(data["generator-trigger"] || "");
-  return {
-    marker,
-    geldig: marker === "werkplan-intake-v1" || Boolean(data.opvangnaam && data.email && data.dagritme)
-  };
-}
-
-function veiligeFoutmelding(error) {
-  const token = String(process.env.ADMIN_TOKEN || "");
-  let message = String(error?.message || error || "Onbekende fout");
-  if (token) message = message.replaceAll(token, "[geheim verborgen]");
-  return message.replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[API-sleutel verborgen]");
-}
-
-async function dispatchNaarAchtergrond(data, id) {
-  const baseUrl = process.env.URL || process.env.DEPLOY_PRIME_URL;
-  const token = process.env.ADMIN_TOKEN;
-  if (!baseUrl) throw new Error("Netlify-site-URL ontbreekt");
-  if (!token || token.length < 12) throw new Error("ADMIN_TOKEN ontbreekt of is te kort");
-
-  const response = await fetch(new URL("/.netlify/functions/verwerk-werkplan", baseUrl), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-internal-token": token
-    },
-    body: JSON.stringify({ data, id }),
-    signal: AbortSignal.timeout(8000)
-  });
-  if (!response.ok) throw new Error(`Achtergrondfunctie kon niet worden gestart (${response.status})`);
-}
-
-export default async (req) => {
-    console.log("Formuliertrigger submission-created v6.2 ontvangen");
-    const { payload } = await req.json();
-    const data = payload?.data || {};
-    const herkenning = intakeHerkennen(data);
-
-    console.log("Formulier-event ontvangen", {
-      marker: herkenning.marker || "ontbreekt",
-      intakeHerkenning: herkenning.geldig,
-      velden: Object.keys(data).sort()
-    });
-
-    if (!herkenning.geldig) {
-      console.log("Event overgeslagen: geen werkplan-intake");
-      return;
-    }
-
-    const pkg=packageFor(data.pakket);
-    data.pakket=pkg.id;
-    const id=randomUUID();
-    const store=getStore({name:"opvangwerkplan-concepten",consistency:"strong"});
-    await store.setJSON(`jobs/${id}.json`,{id,createdAt:new Date().toISOString(),opvangnaam:data.opvangnaam||"",status:"wachtrij"});
-    try {
-      await dispatchNaarAchtergrond(data, id);
-      console.log("Werkplan veilig in de achtergrondwachtrij geplaatst");
-    } catch (error) {
-      console.error("Achtergrondgeneratie starten mislukt", veiligeFoutmelding(error));
-      try {
-
-        const createdAt = new Date().toISOString();
-        const store = getStore({ name: "opvangwerkplan-concepten", consistency: "strong" });
-        await store.setJSON(`errors/${id}.json`, {
-          id,
-          createdAt,
-          naam: data.naam || "",
-          email: data.email || "",
-          opvangnaam: data.opvangnaam || "",
-          error: veiligeFoutmelding(error)
-        });
-      } catch (storageError) {
-        console.error("Startfout kon niet worden opgeslagen", veiligeFoutmelding(storageError));
-      }
-    }
-};
+// Netlify verifies the platform event signature. No public intake bypass is added.
+export const config={background:true};
+export function createSubmissionHandler(factory=getAppStore,process=processIntake,isProduction=()=>environmentInfo().production){return async req=>{
+ if(!isProduction())return;
+ const {payload}=await req.json();const data=payload?.data||{};
+ if(data['generator-trigger']!=='werkplan-intake-v1'&&!(data.opvangnaam&&data.email&&data.dagritme))return;
+ data.pakket=packageFor(data.pakket).id;
+ // Stable binding to the verified platform submission prevents repeated event delivery
+ // from creating another workplan or sending another intake confirmation.
+ const hex=typeof payload.id==='string'&&payload.id?createHash('sha256').update('netlify-submission:'+payload.id).digest('hex'):null;
+ const id=hex?`${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`:randomUUID();
+ const store=factory();if(await store.get(`claims/${id}.json`,{type:'json'}))return;
+ await store.setJSON(`jobs/${id}.json`,{id,createdAt:new Date().toISOString(),opvangnaam:data.opvangnaam||'',status:'wachtrij'},{onlyIfNew:true});
+ await process(data,id);
+};}
+export default createSubmissionHandler();

@@ -1,3 +1,4 @@
+import {liveMailAllowed} from './environment.mjs';
 import {recordPackage} from './packages.mjs';
 import nodemailer from 'nodemailer';
 export const CONTACT='opvangwerkplan@gmail.com';
@@ -12,7 +13,7 @@ export function mailTemplate(kind,data){
  return {subject:title+' | Opvangwerkplan',html,text};
 }
 export async function sendCustomerMail(store,key,kind,data,attachments=[],transport){
- const mode=process.env.MAIL_MODE||'off';
+ const mode=liveMailAllowed()?(process.env.MAIL_MODE||'off'):'off';
  if(mode==='off')return {status:'disabled'};
  if(!['test','live'].includes(mode))throw Error('MAIL_MODE moet off, test of live zijn.');
  const isTest=mode==='test'||data.testPayment===true;
@@ -27,7 +28,8 @@ export async function sendCustomerMail(store,key,kind,data,attachments=[],transp
  try{
   const content=mailTemplate(kind,data);
   if(isTest){content.subject='[TEST] '+content.subject;content.text='TESTBERICHT — alleen voor de beheerder.\n\n'+content.text;content.html=content.html.replace('<body ', '<body ').replace('<h1 ', '<p style="color:#a45b36;font-weight:bold">TESTBERICHT — alleen voor de beheerder</p><h1 ');}
-  await client.sendMail({from:{name:'Opvangwerkplan',address:CONTACT},replyTo:CONTACT,to,...content,attachments,disableFileAccess:true,disableUrlAccess:true});
+  const sent=await client.sendMail({from:{name:'Opvangwerkplan',address:CONTACT},replyTo:CONTACT,to,...content,attachments,disableFileAccess:true,disableUrlAccess:true});
+  if(!sent?.accepted?.length)throw Error('SMTP heeft geen ontvanger geaccepteerd.');
   await store.setJSON(claimKey,{status:'sent',kind,at:new Date().toISOString()});
   return {status:'sent'};
  }catch(error){

@@ -1,6 +1,6 @@
 {
   "name": "opvangwerkplan-netlify",
-  "version": "8.0.0",
+  "version": "8.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,14 @@
     "test:pdf": "node scripts/test-pdf.mjs",
     "test:admin": "node scripts/test-admin.mjs",
     "test:payment": "node scripts/test-payment.mjs",
-    "test:revisions": "node scripts/test-revisions.mjs"
+    "test:revisions": "node scripts/test-revisions.mjs",
+    "test:isolation": "node scripts/test-isolation.mjs",
+    "test:intake-chain": "node scripts/test-intake-chain.mjs",
+    "test:intake-ui": "node scripts/test-intake-ui.mjs",
+    "test:review-chain": "node scripts/test-review-chain.mjs",
+    "test:review-ui": "node scripts/test-review-ui.mjs",
+    "test:workflow": "node scripts/test-workflow.mjs",
+    "test:release": "node scripts/test-release.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^10.0.10",

@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const fieldNames={opvangnaam:'Naam van de opvang',plaats:'Plaats',opvang:'Over de opvang',werkwijze:'Werkwijze en wennen',activiteiten:'Activiteiten en speelmaterialen',speelruimte:'Binnen- en buitenspeelruimte',emotionele_veiligheid:'Emotionele veiligheid',persoonlijke_competenties:'Persoonlijke competenties',sociale_competenties:'Sociale competenties',normen_waarden:'Normen en waarden',ontwikkeling:'Ontwikkeling volgen',bureau_beleid:'Beleid van het gastouderbureau',actualiseren:'Actueel houden'};
-let token='', data={},current=null,version='',dirty=false,busy=false;
+let token='', data={},current=null,version='',dirty=false,busy=false,pendingReview=null;
 sessionStorage.removeItem('owp-admin');
 function msg(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
 async function api(path='',body){
@@ -12,7 +12,7 @@ function node(tag,text,cls){const n=document.createElement(tag);n.textContent=te
 function button(text,fn,cls='secondary'){const b=node('button',text,cls);b.type='button';b.onclick=()=>run(fn);return b;}
 async function run(fn){if(busy)return;busy=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn();}catch(e){msg(e.message,true);}finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);if(current)$('final-download').disabled=!current.finalPdfKey;}}
 async function load(){
- data=await(await api()).json();$('login').classList.add('hidden');$('panel').classList.remove('hidden');$('editor').classList.add('hidden');current=null;render();
+ data=await(await api()).json();const env=data.diagnostics?.environment;document.getElementById('environment-banner').textContent=env?(env.production?'PRODUCTIE — echte klantgegevens':'TESTOMGEVING — gescheiden testopslag; alleen fictieve gegevens'):'Omgeving niet bevestigd';if(env)document.getElementById('environment-banner').textContent+=' · AI: '+(data.diagnostics.aiEnabled?'vrijgegeven':'uitgeschakeld');$('login').classList.add('hidden');$('panel').classList.remove('hidden');$('editor').classList.add('hidden');current=null;render();
 }
 function render(){
  const list=$('list'),fail=$('failures');list.replaceChildren();fail.replaceChildren();
@@ -56,13 +56,13 @@ async function action(name,extra={}){const result=await(await api('?id='+current
 $('edit-form').oninput=e=>{dirty=true;if(e.target.id.startsWith('field-')){$('reviewed').checked=false;$('approved').checked=false;}};
 $('edit-form').onsubmit=e=>{e.preventDefault();run(()=>action('save',{values:Object.fromEntries(Object.keys(fieldNames).map(k=>[k,$('field-'+k).value])),checks:[...$('checks').querySelectorAll('input')].map(c=>c.checked),reviewed:$('reviewed').checked,customerApproved:$('approved').checked,payment:$('payment').value,notes:$('notes').value}));};
 $('finalize').onclick=()=>run(async()=>{savedOnly();await action('finalize');});
-$('complete').onclick=()=>run(async()=>{savedOnly();if(confirm('Is de definitieve PDF aan de klant geleverd?'))await action('complete');});
+$('complete').onclick=()=>run(async()=>{savedOnly();const evidence=prompt('Hoe en wanneer heeft u de definitieve Word- en PDF-bestanden geleverd?');if(evidence?.trim())await action('complete',{confirmed:true,evidence});});
 $('archive').onclick=()=>run(async()=>{savedOnly();await action('archive',{archived:!current.archived});await load();});
 function downloadBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);}
 async function pdf(final=false){savedOnly();const r=await api('?id='+current.id+'&format='+(final?'final':'pdf'));downloadBlob(await r.blob(),(final?'werkplan-':'concept-')+current.opvangnaam.replace(/[^a-z0-9]/gi,'-')+'.pdf');}
-async function paymentRequest(){savedOnly();const response=await fetch('/.netlify/functions/betaalverzoek',{method:'POST',headers:{'x-admin-token':token,'content-type':'application/json'},body:JSON.stringify({id:current.id})});const result=await response.json();if(!response.ok)throw Error(result.error||'Betaalverzoek mislukt.');await openRecord(current.id);msg(result.mode==='test'?'TEST-link klaar. Hiermee wordt geen echt geld betaald.':'Betaallink klaar. Kopieer hem en stuur hem na uw schriftelijke opdrachtbevestiging.');}
+async function paymentRequest(checkOnly=false){savedOnly();const response=await fetch('/.netlify/functions/betaalverzoek',{method:'POST',headers:{'x-admin-token':token,'content-type':'application/json'},body:JSON.stringify({id:current.id,...(checkOnly?{action:'status'}:{})})});const result=await response.json();if(!response.ok)throw Error(result.error||'Betaalverzoek mislukt.');await openRecord(current.id);msg(checkOnly?'Betaalstatus gecontroleerd: '+result.status+'.':result.mode==='test'?'TEST-link klaar. Hiermee wordt geen echt geld betaald.':'Betaallink klaar. Kopieer hem en stuur hem na uw schriftelijke opdrachtbevestiging.');}
 $('create-payment').onclick=()=>run(paymentRequest);
-$('check-payment').onclick=()=>run(paymentRequest);
+$('check-payment').onclick=()=>run(()=>paymentRequest(true));
 $('copy-payment').onclick=()=>run(async()=>{savedOnly();if(!current.mollie?.checkoutUrl)throw Error('Maak eerst een betaalverzoek.');await navigator.clipboard.writeText(current.mollie.checkoutUrl);msg('Betaallink gekopieerd. Controleer eerst of TEST of LIVE bij de aanvraag staat en stuur hem daarna persoonlijk naar de klant.');});
 $('word-download').onclick=()=>run(async()=>{savedOnly();const r=await api('?id='+current.id+'&format='+(current.finalPdfKey?'final-docx':'docx'));downloadBlob(await r.blob(),'werkplan-'+current.id+'.docx');});
 $('concept-download').onclick=()=>run(()=>pdf());$('final-download').onclick=()=>run(()=>pdf(true));
@@ -79,7 +79,7 @@ $('open').onclick=()=>run(async()=>{token=$('token').value;await load();$('token
 $('token').onkeydown=e=>{if(e.key==='Enter')$('open').click();};
 $('refresh').onclick=()=>run(load);$('search').oninput=render;$('filter').onchange=render;
 $('back').onclick=()=>run(async()=>{if(dirty&&!confirm('Niet-opgeslagen wijzigingen verlaten?'))return;dirty=false;await load();});
-$('logout').onclick=()=>{token='';current=null;data={};dirty=false;$('login').classList.remove('hidden');$('panel').classList.add('hidden');$('editor').classList.add('hidden');$('list').replaceChildren();$('text-fields').replaceChildren();$('intake-view').replaceChildren();$('failures').replaceChildren();msg('Uitgelogd.');};
+$('logout').onclick=()=>{pendingReview=null;token='';current=null;data={};dirty=false;$('login').classList.remove('hidden');$('panel').classList.add('hidden');$('editor').classList.add('hidden');$('list').replaceChildren();$('text-fields').replaceChildren();$('intake-view').replaceChildren();$('failures').replaceChildren();msg('Uitgelogd.');};
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 
 async function revisionCall(action,extra={}){
@@ -98,9 +98,27 @@ function renderRevisions(){
  $('bureau-rounds').value=r.bureauCorrectionLimit??'';$('bureau-agreement').value=r.bureauAgreement||'';
  $('version-history').replaceChildren();for(const v of [...(r.versionHistory||[])].reverse()){const box=node('article');box.append(node('strong','Versie '+v.number+' · '+new Date(v.at).toLocaleString('nl-NL')),node('p',v.reason));for(const format of ['pdf','docx'])box.append(button('Download '+format.toUpperCase(),async()=>{const response=await fetch('/.netlify/functions/revisies?id='+current.id+'&versionKey='+encodeURIComponent(v.key)+'&format='+format,{headers:{'x-admin-token':token}});if(!response.ok)throw Error('Versie kon niet worden geladen.');downloadBlob(await response.blob(),'versie-'+v.number+'.'+format);}));$('version-history').append(box);}
 }
-async function startReview(action){savedOnly();const id=current.id;const result=await revisionCall(action,{privacyConfirmed:$('review-privacy').checked,feedback:$('customer-feedback').value});version=result.version;$('review-progress').textContent='Analyse op de achtergrond gestart. Laat dit venster open; de aanvraag wordt veilig opgeslagen.';
- for(let i=0;i<180;i++){await new Promise(r=>setTimeout(r,2500));if(!current||current.id!==id)return;const response=await fetch('/.netlify/functions/revisies?id='+id+'&job='+result.jobId,{headers:{'x-admin-token':token}});if(!response.ok)throw Error('Taakstatus niet bereikbaar. Heropen de aanvraag.');const job=await response.json();if(job.status==='fout')throw Error(job.error);if(job.status==='gereed'){await openRecord(id);$('review-progress').textContent='Analyse gereed. Controleer de voorstellen; er is niets automatisch toegepast.';return;}}
- throw Error('De analyse duurt langer dan verwacht. Heropen de aanvraag; start niet direct nogmaals.');
+async function startReview(action){
+ savedOnly();const id=current.id;
+ if(pendingReview&&pendingReview.id!==id)pendingReview=null;
+ let result=pendingReview?.result;
+ if(result&&pendingReview.action!==action)throw Error('Er loopt al een analyse. Controleer eerst de status van die taak.');
+ if(!result){result=await revisionCall(action,{privacyConfirmed:$('review-privacy').checked,feedback:$('customer-feedback').value});version=result.version;pendingReview={id,action,result,started:false};}
+ if(result.worker&&!pendingReview.started){
+  const started=await fetch('/.netlify/functions/revisie-worker',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({...result.task,taskToken:result.taskToken})});
+  if(started.status!==202)throw Error('De analysetaak is opgeslagen, maar starten is geblokkeerd (HTTP '+started.status+'). Bij 401: open de preview via Netlify en meld u opnieuw aan. Klik daarna nogmaals op dezelfde analyseknop; er wordt geen nieuwe taak aangemaakt.');
+  pendingReview.started=true;
+ }
+ $('review-progress').textContent='Analyse op de achtergrond gestart. Laat dit venster open. Taak: '+result.jobId;
+ for(let i=0;i<180;i++){
+  await new Promise(r=>setTimeout(r,2500));if(!current||current.id!==id)return;
+  const response=await fetch('/.netlify/functions/revisies?id='+id+'&job='+result.jobId,{credentials:'same-origin',headers:{'x-admin-token':token}});
+  if(!response.ok)throw Error('Taakstatus niet bereikbaar (HTTP '+response.status+'). Klik opnieuw op dezelfde analyseknop om deze taak te controleren.');
+  const job=await response.json();
+  if(job.status==='fout'){pendingReview=null;await openRecord(id);throw Error(job.error);}
+  if(job.status==='gereed'){pendingReview=null;await openRecord(id);$('review-progress').textContent='Analyse gereed. Controleer de voorstellen; er is niets automatisch toegepast.';return;}
+ }
+ throw Error('De analyse duurt langer dan verwacht. Klik opnieuw op dezelfde analyseknop voor deze taak of heropen de aanvraag.');
 }
 $('questions-generate').onclick=()=>run(()=>startReview('questions'));
 $('analyse-corrections').onclick=()=>run(()=>startReview('analyse'));
