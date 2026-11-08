@@ -3,6 +3,7 @@ import { createPaymentHandler } from '../netlify/functions/betaalverzoek.mjs';
 import { createWebhookHandler } from '../netlify/functions/mollie-webhook.mjs';
 import { fields } from '../netlify/functions/lib/admin-core.mjs';
 import { verifyPayment,applyStatus } from '../netlify/functions/lib/mollie.mjs';
+process.env.OWP_PAYMENT_RELEASE='v7-approved';
 process.env.ADMIN_TOKEN='local-fixture-strong-token';process.env.MOLLIE_MODE='test';process.env.MOLLIE_TEST_API_KEY='test_local_fixture_key';process.env.URL='https://example.netlify.app';
 const db=new Map();let rev=0;
 const store={

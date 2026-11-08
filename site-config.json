@@ -1,14 +1,17 @@
 {
   "launchReady": false,
-  "legalName": "",
-  "tradeName": "Opvangwerkplan",
+  "legalName": "Gianluca Scalise",
+  "tradeName": "OpvangWerkPlan",
   "address": "Achterdijk 5, 3981 HA Bunnik",
-  "kvk": "",
-  "vatId": "",
+  "kvk": "42204523",
+  "vatId": "NL005583560B47",
   "email": "opvangwerkplan@gmail.com",
   "phone": "0615151426",
   "siteUrl": "https://opvangwerkplan.nl",
   "addressReviewComplete": true,
   "legalReviewComplete": false,
-  "privacyReviewComplete": false
+  "privacyReviewComplete": false,
+  "korActive": false,
+  "korEffectiveDate": "",
+  "paymentsEnabled": false
 }

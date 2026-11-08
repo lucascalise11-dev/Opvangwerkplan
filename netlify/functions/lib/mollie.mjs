@@ -14,8 +14,8 @@ export async function mollieCall(mode,id,body,fetcher=fetch){
  if(!response.ok)throw Error('Mollie reageerde niet succesvol ('+response.status+'). Controleer account, sleutel en betaalmethoden.');
  return response.json();
 }
-export function verifyPayment(payment,recordId,paymentId,mode){
- return Boolean(payment&&payment.id===paymentId&&payment.metadata?.recordId===recordId&&payment.amount?.currency==='EUR'&&payment.amount?.value===PRICE&&payment.mode===mode);
+export function verifyPayment(payment,recordId,paymentId,mode,expectedAmount=PRICE){
+ return Boolean(payment&&payment.id===paymentId&&payment.metadata?.recordId===recordId&&payment.amount?.currency==='EUR'&&payment.amount?.value===expectedAmount&&payment.mode===mode);
 }
 export function applyStatus(record,payment){
  const next={...record,mollie:{...record.mollie,status:payment.status,updatedAt:new Date().toISOString()}};

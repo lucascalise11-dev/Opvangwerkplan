@@ -1,3 +1,4 @@
+import {packageFor} from './lib/packages.mjs';
 import { sendCustomerMail } from './lib/customer-mail.mjs';
 import { getStore } from "@netlify/blobs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
@@ -67,6 +68,10 @@ export default async (req) => {
       id,
       createdAt,
       status: "concept",
+      packageId: packageFor(data.pakket).id,
+      packageName: packageFor(data.pakket).name,
+      totalAmount: packageFor(data.pakket).amount,
+      payment: "onbetaald",
       naam: data.naam || "",
       email: data.email || "",
       opvangnaam: data.opvangnaam || "Gastouderopvang",

@@ -6,7 +6,7 @@ export function allowed(req) {
 }
 export function sanitize(message) {
  let value=String(message||"Onbekende fout");
- for(const secret of [process.env.ADMIN_TOKEN,process.env.OPENAI_API_KEY,process.env.MOLLIE_TEST_API_KEY,process.env.MOLLIE_LIVE_API_KEY]) if(secret) value=value.replaceAll(secret,"[verborgen]");
+ for(const secret of [process.env.ADMIN_TOKEN,process.env.OPENAI_API_KEY,process.env.MOLLIE_TEST_API_KEY,process.env.MOLLIE_LIVE_API_KEY,process.env.GMAIL_APP_PASSWORD]) if(secret) value=value.replaceAll(secret,"[verborgen]");
  return value.replace(/sk-[A-Za-z0-9_-]+/g,"[verborgen]").replace(/Incorrect API key provided:[^\n]*/gi,"API-sleutel geweigerd.");
 }
 export function editRecord(record, body) {

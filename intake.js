@@ -1,5 +1,10 @@
 (() => {
  const steps=[...document.querySelectorAll('.step')],progress=document.getElementById('progress'),form=document.getElementById('intakeForm'),status=document.getElementById('form-status');
+ const choice=document.getElementById('pakket'),summary=document.getElementById('package-summary'),extra=document.getElementById('extra-intake');
+ const query=new URLSearchParams(location.search).get('pakket');
+ if(['starter','compleet'].includes(query))choice.value=query;
+ function syncPackage(){const full=choice.value==='compleet';summary.textContent=full?'Compleet: persoonlijke intake, extra uitwerking, Word en PDF, twee correctierondes in totaal en één beperkte actualisatie binnen twaalf maanden.':'Starter: persoonlijk gecontroleerd werkplan, Word en PDF en één correctieronde.';extra.hidden=!full;extra.querySelectorAll('textarea').forEach(t=>t.disabled=!full);}
+ choice.addEventListener('change',syncPackage);syncPackage();
  let current=0,submitting=false;
  form.noValidate=true;
  form.querySelectorAll('textarea').forEach(t=>t.maxLength=6000);
@@ -18,7 +23,7 @@
   try{
    const response=await fetch(form.action,{method:'POST',body:new FormData(form)});
    if(!response.ok)throw Error('De website heeft de inzending niet bevestigd.');
-   location.assign('/intake-ontvangen.html');
+   location.assign('/intake-ontvangen.html?pakket='+encodeURIComponent(choice.value));
   }catch{
    status.textContent='De verzending is niet bevestigd. Uw antwoorden staan nog in dit venster. Neem contact op als u twijfelt of de aanvraag is ontvangen, zodat u niet dubbel indient.';
    button.disabled=false;button.textContent='Opnieuw proberen';submitting=false;

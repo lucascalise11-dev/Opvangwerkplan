@@ -25,10 +25,11 @@ Het concept moet aansluiten op de vaste onderdelen uit het officiële SZW-infobl
 Maak geen claims over GGD-goedkeuring of juridische conformiteit. Een kindvolgsysteem is niet verplicht. Als ontwikkeling van individuele kinderen wordt vastgelegd, benoem alleen indien passend dat daarvoor volgens de intake/afspraken zorgvuldig met privacy en toestemming van ouders moet worden omgegaan. Het werkplan is dynamisch en wordt bijgewerkt wanneer de opvangpraktijk, groepssamenstelling of het beleid van een aangesloten bureau relevant verandert.`;
 
 function intakeText(data, policyFileWasSkipped = false) {
-  const keys = ["opvangnaam","plaats","bureau_namen","groep_omvang","leeftijden","opvangdagen","dagritme","wennen","eigenheid","activiteiten","materialen","binnenruimte","buitenruimte","buitenspelen","emotionele_veiligheid","persoonlijke_competenties","sociale_competenties","normen_waarden","ontwikkeling_volgen","ontwikkeling_ouders","signaleren","bureau_beleid","bijzonderheden"];
+  const keys = ["opvangnaam","plaats","bureau_namen","groep_omvang","leeftijden","opvangdagen","dagritme","wennen","eigenheid","activiteiten","materialen","binnenruimte","buitenruimte","buitenspelen","emotionele_veiligheid","persoonlijke_competenties","sociale_competenties","normen_waarden","ontwikkeling_volgen","ontwikkeling_ouders","signaleren","bureau_beleid","bijzonderheden","verdieping_keuzes","verdieping_praktijk"];
   const labels = Object.fromEntries(keys.map(k => [k, k.replaceAll("_", " ")]));
   const lines = keys.map(k => `${labels[k]}: ${String(data[k] || "").trim() || "NIET INGEVULD"}`);
   if (policyFileWasSkipped) lines.push("Let op: er was een beleidsplanbestand, maar dat kon niet worden verwerkt. Zet dit als controlepunt en verzin de inhoud niet.");
+  if(data.pakket==='compleet')lines.push('Pakket Compleet: werk pedagogische keuzes en aangeleverde praktijksituaties extra uit. Verzin geen voorbeelden die als feitelijke praktijk worden gepresenteerd.');
   return `Maak het concept op basis van deze intake:\n\n${lines.join("\n")}`;
 }
 

@@ -1,3 +1,4 @@
+import {buildWord} from './lib/word.mjs';
 import { getStore } from "@netlify/blobs";
 import { randomUUID } from "node:crypto";
 import { buildConceptPdf } from "./lib/pdf.mjs";
@@ -15,7 +16,7 @@ export function createHandler(getStorage=()=>getStore({name:"opvangwerkplan-conc
   const readAll=async(prefix)=>{const {blobs}=await store.list({prefix}); const records=[]; for(let i=0;i<blobs.length;i+=20) records.push(...await Promise.all(blobs.slice(i,i+20).map(({key})=>store.get(key,{type:"json"})))); return records.filter(Boolean);};
   const [records,errors,jobs]=await Promise.all([readAll("records/"),readAll("errors/"),readAll("jobs/")]);
   const sort=(a,b)=>String(b.createdAt).localeCompare(String(a.createdAt));
-  return json({items:records.map(r=>({id:r.id,createdAt:r.createdAt,naam:r.naam,email:r.email,opvangnaam:r.opvangnaam,status:r.status||"concept",payment:r.payment||"onbetaald",archived:!!r.archived,controlepunten:(r.controlepunten||[]).filter((_,i)=>!r.checked?.[i]).length})).sort(sort),
+  return json({items:records.map(r=>({id:r.id,createdAt:r.createdAt,naam:r.naam,email:r.email,opvangnaam:r.opvangnaam,status:r.status||"concept",packageName:r.packageName||"Starter",payment:r.payment||"onbetaald",archived:!!r.archived,controlepunten:(r.controlepunten||[]).filter((_,i)=>!r.checked?.[i]).length})).sort(sort),
    errors:errors.filter(e=>!records.some(r=>r.id===e.id)).map(r=>({...r,error:sanitize(r.error)})).sort(sort),
    jobs:jobs.filter(j=>!records.some(r=>r.id===j.id)&&!errors.some(e=>e.id===j.id)).sort(sort),
    diagnostics:{openAIConfigured:!!process.env.OPENAI_API_KEY}});
@@ -26,6 +27,11 @@ export function createHandler(getStorage=()=>getStore({name:"opvangwerkplan-conc
   const entry=await store.getWithMetadata(key,{type:"json"});
   if(!entry) return json({error:"Niet gevonden."},404);
   const r=entry.data;
+  if(format==='docx'||format==='final-docx'){
+   const final=format==='final-docx';
+   if(final&&(!r.finalPdfKey||!canFinalize(r)))return json({error:'Maak eerst de gecontroleerde definitieve versie.'},409);
+   return new Response(await buildWord(r,{final}),{headers:{...headers,'content-type':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','content-disposition':'attachment; filename="werkplan-'+id+'.docx"'}});
+  }
   if(format==="pdf"||format==="final"){
    if(format==="final"&&!r.finalPdfKey) return json({error:"Maak eerst een definitieve PDF."},409);
    const pdfKey=format==="final"?r.finalPdfKey:(r.pdfKey||"pdf/"+id+".pdf");

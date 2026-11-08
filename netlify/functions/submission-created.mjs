@@ -1,3 +1,4 @@
+import {packageFor} from './lib/packages.mjs';
 import { getStore } from "@netlify/blobs";
 import { randomUUID } from "node:crypto";
 
@@ -51,6 +52,8 @@ export default async (req) => {
       return;
     }
 
+    const pkg=packageFor(data.pakket);
+    data.pakket=pkg.id;
     const id=randomUUID();
     const store=getStore({name:"opvangwerkplan-concepten",consistency:"strong"});
     await store.setJSON(`jobs/${id}.json`,{id,createdAt:new Date().toISOString(),opvangnaam:data.opvangnaam||"",status:"wachtrij"});

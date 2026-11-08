@@ -21,7 +21,7 @@ export function createWebhookHandler(storeFactory=()=>getStore({name:'opvangwerk
    const store=storeFactory(),mapping=await store.get('payments/'+paymentId+'.json',{type:'json'});
    if(!mapping)return ok;
    const payment=await provider(mapping.mode,paymentId);
-   if(!verifyPayment(payment,mapping.recordId,paymentId,mapping.mode))throw Error('Betaalgegevens komen niet overeen.');
+   if(!verifyPayment(payment,mapping.recordId,paymentId,mapping.mode,mapping.amount||'49.00'))throw Error('Betaalgegevens komen niet overeen.');
    const key='records/'+mapping.recordId+'.json';
    for(let i=0;i<6;i++){
     const entry=await store.getWithMetadata(key,{type:'json'});if(!entry)return ok;

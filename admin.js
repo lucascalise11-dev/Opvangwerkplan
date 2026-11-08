@@ -26,7 +26,7 @@ function render(){
  const det=document.createElement('details');det.append(node('summary','Bekijk foutmelding'),node('p',e.error));box.append(det,button(archived?'Terugzetten':'Fout archiveren',async()=>{await api('?id='+encodeURIComponent(e.id),{action:'archiveError',archived:!archived});await load();}));fail.append(box);}
  const items=(data.items||[]).filter(i=>!!i.archived===archived&&(['active','archive'].includes($('filter').value)||i.status===$('filter').value)&&[i.opvangnaam,i.naam,i.email].join(' ').toLowerCase().includes(q));
  if(!items.length)list.append(node('p','Geen aanvragen in deze selectie.'));
- for(const i of items){const card=node('article','','card'),info=node('div');info.append(node('h2',i.opvangnaam||'Opvang'),node('p',[i.naam,i.email,new Date(i.createdAt).toLocaleString('nl-NL')].filter(Boolean).join(' · '),'meta'),node('span',i.status+' · '+i.payment+' · '+i.controlepunten+' open controlepunten','badge'));card.append(info,button('Open werkplan',()=>openRecord(i.id)));list.append(card);}
+ for(const i of items){const card=node('article','','card'),info=node('div');info.append(node('h2',i.opvangnaam||'Opvang'),node('p',[i.naam,i.email,new Date(i.createdAt).toLocaleString('nl-NL')].filter(Boolean).join(' · '),'meta'),node('span',(i.packageName||'Starter')+' · '+i.status+' · '+i.payment+' · '+i.controlepunten+' open controlepunten','badge'));card.append(info,button('Open werkplan',()=>openRecord(i.id)));list.append(card);}
 }
 async function openRecord(id){
  const result=await(await api('?id='+encodeURIComponent(id))).json();showRecord(result);msg('');
@@ -34,13 +34,13 @@ async function openRecord(id){
 function showRecord(result){
  current=result.record;version=result.version;dirty=false;
  $('panel').classList.add('hidden');$('editor').classList.remove('hidden');
- $('editor-title').textContent=current.opvangnaam;$('editor-meta').textContent=[current.naam,current.email,current.status||'concept'].join(' · ');
+ $('editor-title').textContent=current.opvangnaam;$('editor-meta').textContent=[current.naam,current.email,current.packageName||'Starter',current.status||'concept'].join(' · ');
  $('text-fields').replaceChildren();
  for(const [key,label] of Object.entries(fieldNames)){const l=node('label',label);l.htmlFor='field-'+key;const t=document.createElement('textarea');t.id='field-'+key;t.value=current[key]||'';t.required=true;t.maxLength=20000;if(['plaats','opvangnaam'].includes(key))t.style.minHeight='60px';$('text-fields').append(l,t);}
  $('checks').replaceChildren();
  for(const [i,text] of (current.controlepunten||[]).entries()){const l=node('label','','check'),c=document.createElement('input');c.type='checkbox';c.checked=!!current.checked?.[i];c.dataset.check=i;l.append(c,document.createTextNode(text));$('checks').append(l);}
  if(!current.controlepunten?.length)$('checks').append(node('p','Geen aanvullende controlepunten. Lees wel het hele werkplan na.'));
- $('mollie-state').textContent=current.mollie?.id?('Mollie '+(current.mollie.mode==='test'?'TEST (geen echt geld)':'LIVE')+' · Status: '+current.mollie.status+' · Bedrag: €49'):'Geen Mollie-betaling aan deze aanvraag gekoppeld.';
+ $('mollie-state').textContent=current.mollie?.id?('Mollie '+(current.mollie.mode==='test'?'TEST (geen echt geld)':'LIVE')+' · Status: '+current.mollie.status+' · Bedrag: €'+(current.totalAmount||'49.00').replace('.',',')):'Geen Mollie-betaling aan deze aanvraag gekoppeld.';
  $('copy-payment').disabled=!current.mollie?.checkoutUrl||current.payment==='betaald';
  $('payment').disabled=!!current.mollie?.id;
  $('reviewed').checked=!!current.reviewed;$('approved').checked=!!current.customerApproved;$('payment').value=current.payment||'onbetaald';$('notes').value=current.notes||'';
@@ -63,12 +63,13 @@ async function paymentRequest(){savedOnly();const response=await fetch('/.netlif
 $('create-payment').onclick=()=>run(paymentRequest);
 $('check-payment').onclick=()=>run(paymentRequest);
 $('copy-payment').onclick=()=>run(async()=>{savedOnly();if(!current.mollie?.checkoutUrl)throw Error('Maak eerst een betaalverzoek.');await navigator.clipboard.writeText(current.mollie.checkoutUrl);msg('Betaallink gekopieerd. Controleer eerst of TEST of LIVE bij de aanvraag staat en stuur hem daarna persoonlijk naar de klant.');});
+$('word-download').onclick=()=>run(async()=>{savedOnly();const r=await api('?id='+current.id+'&format='+(current.finalPdfKey?'final-docx':'docx'));downloadBlob(await r.blob(),'werkplan-'+current.id+'.docx');});
 $('concept-download').onclick=()=>run(()=>pdf());$('final-download').onclick=()=>run(()=>pdf(true));
 $('export').onclick=()=>run(async()=>{savedOnly();downloadBlob(new Blob([JSON.stringify(current,null,2)],{type:'application/json'}),'aanvraag-'+current.id+'.json');});
 function mail(type){savedOnly();if(type==='delivery'&&!current.finalPdfKey)throw Error('Maak eerst een definitieve PDF.');
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(current.email||''))throw Error('Controleer het e-mailadres van de klant.');
  const intro='Beste '+(current.naam||'gastouder')+',\n\n';
- const texts={review:'Bijgevoegd vindt u het conceptwerkplan voor '+current.opvangnaam+'. Wilt u controleren of dit uw eigen opvangpraktijk en het beleid van uw gastouderbureau goed beschrijft? Stuur uw aanvullingen of akkoord in een reactie.\n\n[Voeg de concept-PDF toe vóór verzending.]',payment:'Zoals besproken bedraagt de prijs voor uw werkplan €49 inclusief btw. Eén correctieronde is inbegrepen.\n\n[Voeg de juiste factuur of het betaalverzoek toe en bevestig de leverdatum en voorwaarden.]',delivery:'Bijgevoegd vindt u uw definitieve pedagogisch werkplan voor '+current.opvangnaam+'. Bewaar het document en werk het bij wanneer uw opvang of bureaubeleid verandert.\n\n[Voeg de definitieve PDF toe vóór verzending.]'};
+ const texts={review:'Bijgevoegd vindt u het conceptwerkplan voor '+current.opvangnaam+'. Wilt u controleren of dit uw eigen opvangpraktijk en het beleid van uw gastouderbureau goed beschrijft? Stuur uw aanvullingen of akkoord in een reactie.\n\n[Voeg de concept-PDF toe vóór verzending.]',payment:'Zoals besproken bedraagt de prijs voor uw '+(current.packageName||'Starter')+' werkplan €'+(current.totalAmount||'49.00').replace('.',',')+' inclusief 21% btw. De inbegrepen correctierondes volgen uw pakket.\n\n[Voeg de juiste factuur of het betaalverzoek toe en bevestig de leverdatum en voorwaarden.]',delivery:'Bijgevoegd vindt u uw definitieve pedagogisch werkplan voor '+current.opvangnaam+'. Bewaar het document en werk het bij wanneer uw opvang of bureaubeleid verandert.\n\n[Voeg de definitieve PDF én het Word-bestand toe vóór verzending.]'};
  const subject={review:'Uw conceptwerkplan ter controle',payment:'Betaling en afspraken voor uw werkplan',delivery:'Uw definitieve pedagogisch werkplan'}[type];
  location.href='mailto:'+encodeURIComponent(current.email)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(intro+texts[type]+'\n\nMet vriendelijke groet,\nLuca\nOpvangWerkPlan');
 }

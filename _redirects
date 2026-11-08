@@ -1,0 +1,10 @@
+/intake /intake.html 200
+/contact /contact.html 200
+/privacy /privacy.html 200
+/voorwaarden /voorwaarden.html 200
+/pakketten /#prijs 301
+/broncode.zip /404.html 404!
+/HANDLEIDING.txt /404.html 404!
+/TESTRAPPORT.txt /404.html 404!
+/broncode/* /404.html 404!
+/herstel/* /404.html 404!

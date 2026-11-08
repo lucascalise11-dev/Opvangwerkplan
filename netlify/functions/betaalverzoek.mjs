@@ -1,3 +1,4 @@
+import {recordPackage} from './lib/packages.mjs';
 import { getStore } from '@netlify/blobs';
 import { allowed,sanitize,canFinalize } from './lib/admin-core.mjs';
 import { PRICE,paymentMode,assertMollieCredentials,mollieCall,verifyPayment,applyStatus } from './lib/mollie.mjs';
@@ -10,15 +11,17 @@ export function createPaymentHandler(storeFactory=()=>getStore({name:'opvangwerk
   let input;try{if(Number(req.headers.get('content-length')||0)>2000)throw Error();input=await req.json();}catch{return response({error:'Ongeldige aanvraag.'},400);}
   const id=input?.id;if(!idPattern.test(id||''))return response({error:'Ongeldig aanvraagnummer.'},400);
   try{
+   if(process.env.OWP_PAYMENT_RELEASE!=='v7-approved')return response({error:'Online betalen is nog niet beschikbaar. Deze aanvraag is niet betaald.'},409);
    const mode=paymentMode();if(mode==='off')return response({error:'Mollie is nog niet ingesteld. Gebruik eerst de testmodus.'},409);
    assertMollieCredentials(mode);
    const store=storeFactory(),key='records/'+id+'.json',entry=await store.getWithMetadata(key,{type:'json'});
    if(!entry)return response({error:'Aanvraag niet gevonden.'},404);
    const record=entry.data;
+   const price=recordPackage(record).amount;
    if(!canFinalize(record)||!record.finalPdfKey||record.archived)return response({error:'Controleer de tekst en het klantakkoord, maak een definitieve PDF en sla de aanvraag op voordat u een betaalverzoek maakt.'},409);
    if(record.mollie?.id){
     const latest=await provider(record.mollie.mode,record.mollie.id);
-    if(!verifyPayment(latest,id,record.mollie.id,record.mollie.mode))throw Error('De betaalgegevens van Mollie komen niet overeen.');
+    if(!verifyPayment(latest,id,record.mollie.id,record.mollie.mode,record.mollie.amount||price))throw Error('De betaalgegevens van Mollie komen niet overeen.');
     const synced=applyStatus(record,latest);
     if(['open','pending','authorized','paid'].includes(latest.status)&&synced.payment!=='onbetaald'){
      if(latest.status!==record.mollie.status||synced.payment!==record.payment){const update=await store.setJSON(key,synced,{onlyIfMatch:entry.etag});if(!update.modified)return response({error:'Aanvraag intussen gewijzigd. Laad opnieuw.'},409);}
@@ -35,11 +38,11 @@ export function createPaymentHandler(storeFactory=()=>getStore({name:'opvangwerk
     const origin=process.env.URL;if(!origin||!/^https:\/\//i.test(origin))throw Error('Veilige Netlify-site-URL ontbreekt.');
     // Once the request has been sent, a timeout is ambiguous: keep the lock to prevent duplicate charges.
     created=true;
-    const p=await provider(mode,null,{amount:{currency:'EUR',value:PRICE},description:'Pedagogisch werkplan - '+id.slice(0,8),redirectUrl:new URL('/betaling-terug.html',origin).href,webhookUrl:new URL('/.netlify/functions/mollie-webhook',origin).href,metadata:{recordId:id}});
-    if(!p.id||!p._links?.checkout?.href||p.amount?.value!==PRICE||p.amount?.currency!=='EUR')throw Error('Mollie gaf geen geldig betaalverzoek terug.');
-    const paymentRecord={recordId:id,mode,createdAt:new Date().toISOString()};
+    const p=await provider(mode,null,{amount:{currency:'EUR',value:price},description:recordPackage(record).name+' pedagogisch werkplan - '+id.slice(0,8),redirectUrl:new URL('/betaling-terug.html',origin).href,webhookUrl:new URL('/.netlify/functions/mollie-webhook',origin).href,metadata:{recordId:id}});
+    if(!p.id||!p._links?.checkout?.href||p.amount?.value!==price||p.amount?.currency!=='EUR')throw Error('Mollie gaf geen geldig betaalverzoek terug.');
+    const paymentRecord={recordId:id,amount:price,mode,createdAt:new Date().toISOString()};
     await store.setJSON('payments/'+p.id+'.json',paymentRecord,{onlyIfNew:true});
-    const next={...record,payment:'betaalverzoek',mollie:{id:p.id,mode,status:p.status||'open',attempt,checkoutUrl:p._links.checkout.href},updatedAt:new Date().toISOString()};
+    const next={...record,payment:'betaalverzoek',mollie:{id:p.id,amount:price,mode,status:p.status||'open',attempt,checkoutUrl:p._links.checkout.href},updatedAt:new Date().toISOString()};
     const update=await store.setJSON(key,next,{onlyIfMatch:entry.etag});
     if(!update.modified)throw Error('Aanvraag intussen gewijzigd. Controleer in Mollie of een betaalverzoek is aangemaakt.');
     return response({id:p.id,mode,status:p.status||'open',checkoutUrl:p._links.checkout.href});
