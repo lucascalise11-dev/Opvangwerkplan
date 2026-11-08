@@ -46,6 +46,7 @@ async function callWithoutPolicyFile(apiKey, data) {
 }
 
 export async function generateWorkplan(apiKey, data) {
+  if(process.env.AI_PROCESSING_APPROVED!=="yes")throw Error("AI-verwerking nog niet vrijgegeven na privacy- en verwerkerscontrole.");
   if (!apiKey) throw new Error("OPENAI_API_KEY ontbreekt");
   const policyUrl = String(data.bureau_beleid_bestand || "").trim();
   let response = await callOpenAI(apiKey, data, policyUrl);

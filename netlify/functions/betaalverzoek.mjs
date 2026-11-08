@@ -17,6 +17,7 @@ export function createPaymentHandler(storeFactory=()=>getStore({name:'opvangwerk
    const store=storeFactory(),key='records/'+id+'.json',entry=await store.getWithMetadata(key,{type:'json'});
    if(!entry)return response({error:'Aanvraag niet gevonden.'},404);
    const record=entry.data;
+   if(record.packageId==='bureau'||record.intake?.pakket==='bureau')return response({error:'Bureauofferte vereist een afzonderlijk overeengekomen betaalbedrag.'},409);
    const price=recordPackage(record).amount;
    if(!canFinalize(record)||!record.finalPdfKey||record.archived)return response({error:'Controleer de tekst en het klantakkoord, maak een definitieve PDF en sla de aanvraag op voordat u een betaalverzoek maakt.'},409);
    if(record.mollie?.id){

@@ -1,3 +1,4 @@
+import {snapshot,workflow} from './lib/revision-core.mjs';
 import {buildWord} from './lib/word.mjs';
 import { getStore } from "@netlify/blobs";
 import { randomUUID } from "node:crypto";
@@ -16,7 +17,7 @@ export function createHandler(getStorage=()=>getStore({name:"opvangwerkplan-conc
   const readAll=async(prefix)=>{const {blobs}=await store.list({prefix}); const records=[]; for(let i=0;i<blobs.length;i+=20) records.push(...await Promise.all(blobs.slice(i,i+20).map(({key})=>store.get(key,{type:"json"})))); return records.filter(Boolean);};
   const [records,errors,jobs]=await Promise.all([readAll("records/"),readAll("errors/"),readAll("jobs/")]);
   const sort=(a,b)=>String(b.createdAt).localeCompare(String(a.createdAt));
-  return json({items:records.map(r=>({id:r.id,createdAt:r.createdAt,naam:r.naam,email:r.email,opvangnaam:r.opvangnaam,status:r.status||"concept",packageName:r.packageName||"Starter",payment:r.payment||"onbetaald",archived:!!r.archived,controlepunten:(r.controlepunten||[]).filter((_,i)=>!r.checked?.[i]).length})).sort(sort),
+  return json({items:records.map(r=>({id:r.id,createdAt:r.createdAt,naam:r.naam,email:r.email,opvangnaam:r.opvangnaam,status:r.status||"concept",workflowStatus:workflow(r),packageName:r.packageName||"Starter",payment:r.payment||"onbetaald",archived:!!r.archived,controlepunten:(r.controlepunten||[]).filter((_,i)=>!r.checked?.[i]).length})).sort(sort),
    errors:errors.filter(e=>!records.some(r=>r.id===e.id)).map(r=>({...r,error:sanitize(r.error)})).sort(sort),
    jobs:jobs.filter(j=>!records.some(r=>r.id===j.id)&&!errors.some(e=>e.id===j.id)).sort(sort),
    diagnostics:{openAIConfigured:!!process.env.OPENAI_API_KEY}});
@@ -55,8 +56,9 @@ export function createHandler(getStorage=()=>getStore({name:"opvangwerkplan-conc
  if(!entry)return json({error:"Niet gevonden."},404);
  if(!body.version||body.version!==entry.etag)return json({error:"Deze aanvraag is intussen gewijzigd. Kopieer uw wijzigingen en open de nieuwste versie."},409);
  let next={...entry.data},newPdfKey;
+ if(["save","finalize"].includes(body.action))next=await snapshot(store,next,body.action==="save"?"Handmatige tekstbewerking":"Vóór definitief maken");
  if(body.action==="save"){
-  try{next=editRecord(next,body);}catch(e){return json({error:e.message},400);}
+  try{next=editRecord(next,body);next.workflowStatus="Concept gegenereerd";}catch(e){return json({error:e.message},400);}
   newPdfKey="pdf/"+id+"/"+randomUUID()+".pdf";
   await store.set(newPdfKey,new Blob([await makePdf(next)],{type:"application/pdf"}));
   next.pdfKey=newPdfKey;
@@ -64,11 +66,11 @@ export function createHandler(getStorage=()=>getStore({name:"opvangwerkplan-conc
   if(!canFinalize(next))return json({error:"Werk alle controlepunten af en bevestig uw controle én het akkoord van de klant."},409);
   newPdfKey="pdf/"+id+"/"+randomUUID()+".pdf";
   await store.set(newPdfKey,new Blob([await makePdf(next,{final:true})],{type:"application/pdf"}));
-  next.finalPdfKey=newPdfKey; next.status="definitief";next.finalizedAt=new Date().toISOString();
+  next.finalPdfKey=newPdfKey; next.status="definitief";next.workflowStatus="Wachten op klantakkoord";next.finalizedAt=new Date().toISOString();
  }else if(body.action==="complete"){
   if(next.mollie?.mode==="test")return json({error:"Een TEST-betaling is geen echte betaling. Rond alleen een werkelijk betaalde opdracht af."},409);
-  if(!next.finalPdfKey||next.payment!=="betaald")return json({error:"Een definitieve PDF en betaalstatus ‘betaald’ zijn nodig om af te ronden."},409);
-  next.status="afgerond";next.completedAt=new Date().toISOString();
+  if(!next.finalPdfKey||next.payment!=="betaald"||next.mollie?.status!=="paid"||next.mollie?.mode!=="live")return json({error:"Een definitieve PDF en betaalstatus ‘betaald’ zijn nodig om af te ronden."},409);
+  next.status="afgerond";next.workflowStatus="Definitief afgerond";next.completedAt=new Date().toISOString();next.deliveredAt=next.completedAt;
  }else if(body.action==="archive"){
   next.archived=body.archived===true;
  }else{return json({error:"Onbekende actie."},400);}
@@ -78,7 +80,7 @@ export function createHandler(getStorage=()=>getStore({name:"opvangwerkplan-conc
  // Remove superseded PDFs only after the new record is committed.
  const keep=new Set([next.pdfKey||"pdf/"+id+".pdf",next.finalPdfKey]);
  const oldKeys=[entry.data.pdfKey||"pdf/"+id+".pdf",entry.data.finalPdfKey].filter(k=>k&&!keep.has(k));
- for(const oldKey of oldKeys)try{await store.delete(oldKey);}catch{console.warn("Oude PDF opruimen niet gelukt");}
+ // Previous document objects are retained for the version history.
  return json({record:next,version:result.etag});
  }catch(e){console.error("Beheerfout",sanitize(e.message));return json({error:"Opslaan of laden is niet gelukt. Probeer opnieuw; controleer bij aanhoudende fouten de functielog."},500);}
  };
