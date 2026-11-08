@@ -26,13 +26,14 @@ function render(){
  const det=document.createElement('details');det.append(node('summary','Bekijk foutmelding'),node('p',e.error));box.append(det,button(archived?'Terugzetten':'Fout archiveren',async()=>{await api('?id='+encodeURIComponent(e.id),{action:'archiveError',archived:!archived});await load();}));fail.append(box);}
  const items=(data.items||[]).filter(i=>!!i.archived===archived&&(['active','archive'].includes($('filter').value)||i.status===$('filter').value)&&[i.opvangnaam,i.naam,i.email].join(' ').toLowerCase().includes(q));
  if(!items.length)list.append(node('p','Geen aanvragen in deze selectie.'));
- for(const i of items){const card=node('article','','card'),info=node('div');info.append(node('h2',i.opvangnaam||'Opvang'),node('p',[i.naam,i.email,new Date(i.createdAt).toLocaleString('nl-NL')].filter(Boolean).join(' · '),'meta'),node('span',(i.packageName||'Starter')+' · '+i.status+' · '+i.payment+' · '+i.controlepunten+' open controlepunten','badge'));card.append(info,button('Open werkplan',()=>openRecord(i.id)));list.append(card);}
+ for(const i of items){const card=node('article','','card'),info=node('div');info.append(node('h2',i.opvangnaam||'Opvang'),node('p',[i.naam,i.email,new Date(i.createdAt).toLocaleString('nl-NL')].filter(Boolean).join(' · '),'meta'),node('span',(i.packageName||'Starter')+' · '+(i.workflowStatus||i.status)+' · '+i.payment+' · '+i.controlepunten+' open controlepunten','badge'));card.append(info,button('Open werkplan',()=>openRecord(i.id)));list.append(card);}
 }
 async function openRecord(id){
  const result=await(await api('?id='+encodeURIComponent(id))).json();showRecord(result);msg('');
 }
 function showRecord(result){
  current=result.record;version=result.version;dirty=false;
+ renderRevisions();
  $('panel').classList.add('hidden');$('editor').classList.remove('hidden');
  $('editor-title').textContent=current.opvangnaam;$('editor-meta').textContent=[current.naam,current.email,current.packageName||'Starter',current.status||'concept'].join(' · ');
  $('text-fields').replaceChildren();
@@ -42,7 +43,7 @@ function showRecord(result){
  if(!current.controlepunten?.length)$('checks').append(node('p','Geen aanvullende controlepunten. Lees wel het hele werkplan na.'));
  $('mollie-state').textContent=current.mollie?.id?('Mollie '+(current.mollie.mode==='test'?'TEST (geen echt geld)':'LIVE')+' · Status: '+current.mollie.status+' · Bedrag: €'+(current.totalAmount||'49.00').replace('.',',')):'Geen Mollie-betaling aan deze aanvraag gekoppeld.';
  $('copy-payment').disabled=!current.mollie?.checkoutUrl||current.payment==='betaald';
- $('payment').disabled=!!current.mollie?.id;
+ $('payment').disabled=true;
  $('reviewed').checked=!!current.reviewed;$('approved').checked=!!current.customerApproved;$('payment').value=current.payment||'onbetaald';$('notes').value=current.notes||'';
  $('intake-view').replaceChildren();
  if(current.intake){for(const [k,v]of Object.entries(current.intake)){if(['generator-trigger','form-name','privacy-akkoord'].includes(k))continue;$('intake-view').append(node('h3',k.replaceAll('_',' ')),node('pre',String(v)));}}
@@ -80,3 +81,34 @@ $('refresh').onclick=()=>run(load);$('search').oninput=render;$('filter').onchan
 $('back').onclick=()=>run(async()=>{if(dirty&&!confirm('Niet-opgeslagen wijzigingen verlaten?'))return;dirty=false;await load();});
 $('logout').onclick=()=>{token='';current=null;data={};dirty=false;$('login').classList.remove('hidden');$('panel').classList.add('hidden');$('editor').classList.add('hidden');$('list').replaceChildren();$('text-fields').replaceChildren();$('intake-view').replaceChildren();$('failures').replaceChildren();msg('Uitgelogd.');};
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
+
+async function revisionCall(action,extra={}){
+ const r=await fetch('/.netlify/functions/revisies?id='+current.id,{method:'POST',headers:{'x-admin-token':token,'content-type':'application/json'},body:JSON.stringify({action,version,...extra})});const result=await r.json();if(!r.ok)throw Error(result.error||'Bewerking mislukt.');return result;
+}
+function renderRevisions(){
+ const r=current;const states=['Nieuwe aanvraag','Concept gegenereerd','Controlepunten open','Wachten op klant','Correcties ontvangen','Correcties ter goedkeuring','Nieuwe versie gereed','Wachten op klantakkoord','Definitief afgerond'];
+ $('workflow-state').replaceChildren(...states.map(s=>{const o=node('option',s);o.value=s;o.disabled=['Nieuwe versie gereed','Definitief afgerond'].includes(s);return o;}));$('workflow-state').value=r.workflowStatus||(r.status==='afgerond'?'Definitief afgerond':(r.controlepunten||[]).some((_,i)=>!r.checked?.[i])?'Controlepunten open':'Concept gegenereerd');
+ $('revision-state').textContent='Versie '+(r.revisionNumber||1)+' · '+(r.correctionsUsed||0)+' correctieronde(s) verwerkt (inbegrepen: '+(r.packageId==='bureau'?(r.bureauCorrectionLimit??'volgens offerte'):r.packageId==='compleet'?2:1)+') · '+(r.updatesUsed||0)+' actualisatie(s) verwerkt. '+(r.status==='concept'||!r.finalPdfKey?'CONCEPT — nog ter controle.':'Definitieve versie beschikbaar.');
+ $('question-text').value=r.questionDraft?.text||'';$('question-text').readOnly=true;$('customer-feedback').value=r.clientFeedback||'';$('review-privacy').checked=false;$('manual-review').checked=false;
+ $('sent-questions').replaceChildren();for(const q of r.sentQuestions||[]){const d=document.createElement('details');d.append(node('summary','Verzonden vragen · '+new Date(q.at).toLocaleString('nl-NL')),node('pre',q.text));$('sent-questions').append(d);}
+ $('answer-links').replaceChildren(node('h3','Antwoorden bij controlepunten'));
+ for(const [i,text]of (r.controlepunten||[]).entries()){const a=r.answerLinks?.find(a=>a.checkIndex===i);const box=node('article');box.append(node('strong',text),node('p',a?a.status+' — '+a.explanation:'Nog geen gekoppeld antwoord.'));$('answer-links').append(box);}
+ $('correction-proposals').replaceChildren();for(const c of r.revisionProposal?.changes||[]){const box=node('article');const l=node('label','','check'),check=document.createElement('input');check.type='checkbox';check.dataset.field=c.field;check.checked=false;l.append(check,document.createTextNode('Goedkeuren: '+(fieldNames[c.field]||c.field)));box.append(l,node('h4','Bestaande tekst'),node('pre',c.existing),node('h4','Voorgestelde tekst'),node('pre',c.proposed),node('p','Bron uit klantmail: '+c.evidence));if(c.manualReview)box.append(node('p','Handmatige controle nodig: onduidelijkheid of tegenstrijdigheid.','warning'));$('correction-proposals').append(box);}
+ if(r.revisionProposal&&!r.revisionProposal.changes.length)$('correction-proposals').append(node('p','Geen concrete tekstwijzigingen gevonden. Bekijk de open punten en aanvullende vragen.'));
+ $('bureau-rounds').value=r.bureauCorrectionLimit??'';$('bureau-agreement').value=r.bureauAgreement||'';
+ $('version-history').replaceChildren();for(const v of [...(r.versionHistory||[])].reverse()){const box=node('article');box.append(node('strong','Versie '+v.number+' · '+new Date(v.at).toLocaleString('nl-NL')),node('p',v.reason));for(const format of ['pdf','docx'])box.append(button('Download '+format.toUpperCase(),async()=>{const response=await fetch('/.netlify/functions/revisies?id='+current.id+'&versionKey='+encodeURIComponent(v.key)+'&format='+format,{headers:{'x-admin-token':token}});if(!response.ok)throw Error('Versie kon niet worden geladen.');downloadBlob(await response.blob(),'versie-'+v.number+'.'+format);}));$('version-history').append(box);}
+}
+async function startReview(action){savedOnly();const id=current.id;const result=await revisionCall(action,{privacyConfirmed:$('review-privacy').checked,feedback:$('customer-feedback').value});version=result.version;$('review-progress').textContent='Analyse op de achtergrond gestart. Laat dit venster open; de aanvraag wordt veilig opgeslagen.';
+ for(let i=0;i<180;i++){await new Promise(r=>setTimeout(r,2500));if(!current||current.id!==id)return;const response=await fetch('/.netlify/functions/revisies?id='+id+'&job='+result.jobId,{headers:{'x-admin-token':token}});if(!response.ok)throw Error('Taakstatus niet bereikbaar. Heropen de aanvraag.');const job=await response.json();if(job.status==='fout')throw Error(job.error);if(job.status==='gereed'){await openRecord(id);$('review-progress').textContent='Analyse gereed. Controleer de voorstellen; er is niets automatisch toegepast.';return;}}
+ throw Error('De analyse duurt langer dan verwacht. Heropen de aanvraag; start niet direct nogmaals.');
+}
+$('questions-generate').onclick=()=>run(()=>startReview('questions'));
+$('analyse-corrections').onclick=()=>run(()=>startReview('analyse'));
+$('questions-edit').onclick=()=>{$('question-text').readOnly=false;$('question-text').focus();};
+$('questions-copy').onclick=()=>run(async()=>{await navigator.clipboard.writeText($('question-text').value);msg('E-mail gekopieerd.');});
+$('questions-save').onclick=()=>run(async()=>{savedOnly();showRecord(await revisionCall('saveMail',{text:$('question-text').value}));msg('E-mail opgeslagen.');});
+$('questions-send').onclick=()=>run(async()=>{savedOnly();if(!confirm('De gecontroleerde e-mail nu naar '+current.email+' versturen?'))return;const saved=await revisionCall('saveMail',{text:$('question-text').value});version=saved.version;showRecord(await revisionCall('sendMail'));msg('E-mail door de mailserver geaccepteerd en bij deze aanvraag vastgelegd.');});
+$('apply-corrections').onclick=()=>run(async()=>{savedOnly();const selected=[...$('correction-proposals').querySelectorAll('input:checked')].map(c=>c.dataset.field);const result=await revisionCall('apply',{selected,kind:$('round-kind').value,manualConfirmed:$('manual-review').checked});showRecord(result);msg('Nieuwe conceptversie gereed. Word en PDF zijn beschikbaar. Klantakkoord is niet geregistreerd.');});
+$('workflow-save').onclick=()=>run(async()=>{savedOnly();showRecord(await revisionCall('setWorkflow',{status:$('workflow-state').value}));msg('Voortgang opgeslagen.');});
+
+$('bureau-save').onclick=()=>run(async()=>{savedOnly();showRecord(await revisionCall('bureauLimit',{limit:Number($('bureau-rounds').value),agreement:$('bureau-agreement').value}));msg('Offerteafspraak opgeslagen.');});

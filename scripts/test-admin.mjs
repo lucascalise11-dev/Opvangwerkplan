@@ -36,7 +36,7 @@ r=await request("POST",{action:"finalize",version:current.version});assert.equal
 assert(current.record.finalPdfKey);
 assert.equal((await request("GET",null,process.env.ADMIN_TOKEN,"?id="+id+"&format=final")).status,200);
 assert.equal((await request("POST",{...save,version:savedVersion})).status,409);
-r=await request("POST",{action:"complete",version:current.version});assert.equal(r.status,200);current=await r.json();
+r=await request("POST",{action:"complete",version:current.version});assert.equal(r.status,409,"Handmatig gekozen betaald mag geen bevestigde betaling worden");
 r=await request("POST",{...save,version:current.version});assert.equal(r.status,200);current=await r.json();
 assert.equal(current.record.finalPdfKey,null,"Tekstbewerking moet definitief akkoord ongeldig maken");
 assert.equal((await request("GET",null,process.env.ADMIN_TOKEN,"?id="+id+"&format=final")).status,409);

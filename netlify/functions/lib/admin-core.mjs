@@ -24,7 +24,7 @@ export function editRecord(record, body) {
  next.customerApproved=body.customerApproved===true;
  if(!["onbetaald","betaalverzoek","betaald"].includes(body.payment)) throw Error("Ongeldige betaalstatus.");
  // A verified Mollie transaction is the only source for its own payment status.
- next.payment=record.mollie?.id ? record.payment : body.payment;
+ next.payment=record.payment||"onbetaald";
  if(typeof body.notes!=="string" || body.notes.length>10000) throw Error("Notities zijn te lang.");
  next.notes=body.notes;
  next.status="concept"; next.finalPdfKey=null; next.finalizedAt=null; next.completedAt=null;
