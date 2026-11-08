@@ -1,3 +1,4 @@
+process.env.AI_TEST_PROCESSING_APPROVED="yes";
 import assert from 'node:assert/strict';
 import {fields} from '../netlify/functions/lib/admin-core.mjs';
 import {applyChanges,validateAnalysis,questionMail,snapshot} from '../netlify/functions/lib/revision-core.mjs';
@@ -29,9 +30,8 @@ response=await handler(req('apply',{selected:['opvang','werkwijze'],kind:'correc
 assert.equal((await handler(req('apply',{selected:['opvang']}))).status,409);
 const otherKey='versions/22222222-2222-4222-8222-222222222222/test.json';assert.equal((await handler(new Request('https://example.test/api?id='+id+'&versionKey='+otherKey,{headers:{'x-admin-token':process.env.ADMIN_TOKEN}}))).status,404);
 console.log('PASS Bij Abuela: approved days/wennen, four children answered, policy/privacy open, selective changes, versions/exports, rounds/updates, no payment/approval, auth/isolation, background worker, mail off. All providers mocked; no external AI/mail calls.');
-// SMTP is injected: these checks never connect to Gmail.
+// A preview cannot send even with accidentally inherited live Gmail settings.
 process.env.MAIL_MODE='live';process.env.GMAIL_APP_PASSWORD='local-only-fixture';let sent=0;
 const mailHandler=createRevisionHandler(()=>store,async()=>{},async()=>{sent++;});
-let latest=await store.getWithMetadata('records/'+id+'.json');await store.setJSON('records/'+id+'.json',{...latest.data,questionDraft:{id:'mail-fixture',questions:result.questions,text:mail}});
-let responseMail=await mailHandler(req('sendMail'));assert.equal(responseMail.status,200);assert.equal(sent,1);assert.equal((await store.get('records/'+id+'.json')).sentQuestions.length,1);assert.equal((await mailHandler(req('sendMail'))).status,409);assert.equal(sent,1);
-console.log('PASS mail mock: history/date stored; waiting-for-client status; duplicate send blocked.');
+assert.equal((await mailHandler(req('sendMail'))).status,409);assert.equal(sent,0);
+console.log('PASS inherited live Gmail settings cannot send in test.');

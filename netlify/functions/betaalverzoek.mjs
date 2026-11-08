@@ -1,10 +1,10 @@
 import {recordPackage} from './lib/packages.mjs';
-import { getStore } from '@netlify/blobs';
+import {getAppStore} from './lib/environment.mjs';
 import { allowed,sanitize,canFinalize } from './lib/admin-core.mjs';
 import { PRICE,paymentMode,assertMollieCredentials,mollieCall,verifyPayment,applyStatus } from './lib/mollie.mjs';
 const idPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const response=(data,status=200)=>Response.json(data,{status,headers:{'cache-control':'no-store'}});
-export function createPaymentHandler(storeFactory=()=>getStore({name:'opvangwerkplan-concepten',consistency:'strong'}),provider=mollieCall){
+export function createPaymentHandler(storeFactory=()=>getAppStore(),provider=mollieCall){
  return async req=>{
   if(!allowed(req))return response({error:'Beheercode klopt niet.'},401);
   if(req.method!=='POST')return response({error:'Methode niet toegestaan.'},405);

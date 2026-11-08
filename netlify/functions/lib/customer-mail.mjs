@@ -1,3 +1,4 @@
+import {liveMailAllowed} from './environment.mjs';
 import {recordPackage} from './packages.mjs';
 import nodemailer from 'nodemailer';
 export const CONTACT='opvangwerkplan@gmail.com';
@@ -12,7 +13,7 @@ export function mailTemplate(kind,data){
  return {subject:title+' | Opvangwerkplan',html,text};
 }
 export async function sendCustomerMail(store,key,kind,data,attachments=[],transport){
- const mode=process.env.MAIL_MODE||'off';
+ const mode=liveMailAllowed()?(process.env.MAIL_MODE||'off'):'off';
  if(mode==='off')return {status:'disabled'};
  if(!['test','live'].includes(mode))throw Error('MAIL_MODE moet off, test of live zijn.');
  const isTest=mode==='test'||data.testPayment===true;

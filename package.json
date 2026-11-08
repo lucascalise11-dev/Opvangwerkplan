@@ -1,6 +1,6 @@
 {
   "name": "opvangwerkplan-netlify",
-  "version": "8.0.0",
+  "version": "8.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,8 @@
     "test:pdf": "node scripts/test-pdf.mjs",
     "test:admin": "node scripts/test-admin.mjs",
     "test:payment": "node scripts/test-payment.mjs",
-    "test:revisions": "node scripts/test-revisions.mjs"
+    "test:revisions": "node scripts/test-revisions.mjs",
+    "test:isolation": "node scripts/test-isolation.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^10.0.10",

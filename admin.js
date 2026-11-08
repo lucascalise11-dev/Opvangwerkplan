@@ -12,7 +12,7 @@ function node(tag,text,cls){const n=document.createElement(tag);n.textContent=te
 function button(text,fn,cls='secondary'){const b=node('button',text,cls);b.type='button';b.onclick=()=>run(fn);return b;}
 async function run(fn){if(busy)return;busy=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn();}catch(e){msg(e.message,true);}finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);if(current)$('final-download').disabled=!current.finalPdfKey;}}
 async function load(){
- data=await(await api()).json();$('login').classList.add('hidden');$('panel').classList.remove('hidden');$('editor').classList.add('hidden');current=null;render();
+ data=await(await api()).json();const env=data.diagnostics?.environment;document.getElementById('environment-banner').textContent=env?(env.production?'PRODUCTIE — echte klantgegevens':'TESTOMGEVING — gescheiden testopslag; alleen fictieve gegevens'):'Omgeving niet bevestigd';if(env)document.getElementById('environment-banner').textContent+=' · AI: '+(data.diagnostics.aiEnabled?'vrijgegeven':'uitgeschakeld');$('login').classList.add('hidden');$('panel').classList.remove('hidden');$('editor').classList.add('hidden');current=null;render();
 }
 function render(){
  const list=$('list'),fail=$('failures');list.replaceChildren();fail.replaceChildren();

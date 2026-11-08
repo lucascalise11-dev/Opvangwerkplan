@@ -1,12 +1,13 @@
+import {environmentInfo,aiPolicy} from './lib/environment.mjs';
 import {snapshot,workflow} from './lib/revision-core.mjs';
 import {buildWord} from './lib/word.mjs';
-import { getStore } from "@netlify/blobs";
+import {getAppStore} from './lib/environment.mjs';
 import { randomUUID } from "node:crypto";
 import { buildConceptPdf } from "./lib/pdf.mjs";
 import { allowed, sanitize, editRecord, canFinalize } from "./lib/admin-core.mjs";
 const headers={"cache-control":"no-store","x-content-type-options":"nosniff"};
 const json=(data,status=200)=>Response.json(data,{status,headers});
-export function createHandler(getStorage=()=>getStore({name:"opvangwerkplan-concepten",consistency:"strong"}), makePdf=buildConceptPdf) {
+export function createHandler(getStorage=()=>getAppStore(), makePdf=buildConceptPdf) {
  return async(req)=>{
  if(!allowed(req)) return json({error:"Beheercode klopt niet."},401);
  if(!["GET","POST"].includes(req.method)) return json({error:"Methode niet toegestaan."},405);
@@ -20,7 +21,7 @@ export function createHandler(getStorage=()=>getStore({name:"opvangwerkplan-conc
   return json({items:records.map(r=>({id:r.id,createdAt:r.createdAt,naam:r.naam,email:r.email,opvangnaam:r.opvangnaam,status:r.status||"concept",workflowStatus:workflow(r),packageName:r.packageName||"Starter",payment:r.payment||"onbetaald",archived:!!r.archived,controlepunten:(r.controlepunten||[]).filter((_,i)=>!r.checked?.[i]).length})).sort(sort),
    errors:errors.filter(e=>!records.some(r=>r.id===e.id)).map(r=>({...r,error:sanitize(r.error)})).sort(sort),
    jobs:jobs.filter(j=>!records.some(r=>r.id===j.id)&&!errors.some(e=>e.id===j.id)).sort(sort),
-   diagnostics:{openAIConfigured:!!process.env.OPENAI_API_KEY}});
+   diagnostics:{openAIConfigured:!!process.env.OPENAI_API_KEY,environment:environmentInfo(),aiEnabled:aiPolicy()}});
  }
  if(!id) return json({error:"Aanvraagnummer ontbreekt."},400);
  const key="records/"+id+".json";

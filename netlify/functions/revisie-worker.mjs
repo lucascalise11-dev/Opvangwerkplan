@@ -1,9 +1,9 @@
-import {getStore} from '@netlify/blobs';
+import {getAppStore} from './lib/environment.mjs';
 import {allowed} from './lib/admin-core.mjs';
 import {analyseRecord} from './lib/revision-ai.mjs';
 import {questionMail} from './lib/revision-core.mjs';
 export const config={background:true};
-export function createWorker(factory=()=>getStore({name:'opvangwerkplan-concepten',consistency:'strong'}),analyse=analyseRecord){return async req=>{
+export function createWorker(factory=()=>getAppStore(),analyse=analyseRecord){return async req=>{
  if(req.method!=='POST'||!allowed(req))return new Response('Niet toegestaan',{status:401});
  const b=await req.json();if(!/^[0-9a-f-]{36}$/i.test(b.id||'')||!/^[0-9a-f-]{36}$/i.test(b.jobId||'')||!['questions','corrections'].includes(b.kind))return new Response('Ongeldig',{status:400});
  const store=factory(),jobKey=`review-jobs/${b.id}/${b.jobId}.json`,key=`records/${b.id}.json`;

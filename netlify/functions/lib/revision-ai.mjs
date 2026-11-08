@@ -1,8 +1,9 @@
+import {assertAiAllowed} from './environment.mjs';
 import {fields} from './admin-core.mjs';
 import {validateAnalysis} from './revision-core.mjs';
 const schema={type:'object',additionalProperties:false,properties:{questions:{type:'array',items:{type:'object',additionalProperties:false,properties:{id:{type:'string'},question:{type:'string'},checkIndices:{type:'array',items:{type:'integer'}}},required:['id','question','checkIndices']}},changes:{type:'array',items:{type:'object',additionalProperties:false,properties:{field:{type:'string',enum:fields},proposed:{type:'string'},evidence:{type:'string'},manualReview:{type:'boolean'}},required:['field','proposed','evidence','manualReview']}},answers:{type:'array',items:{type:'object',additionalProperties:false,properties:{checkIndex:{type:'integer'},status:{type:'string',enum:['beantwoord','onvoldoende','tegenstrijdig','ontbreekt']},explanation:{type:'string'}},required:['checkIndex','status','explanation']}}},required:['questions','changes','answers']};
 export async function analyseRecord(record,feedback='',kind='questions',fetcher=fetch){
- if(process.env.AI_PROCESSING_APPROVED!=='yes')throw Error('AI-verwerking is nog niet vrijgegeven. Controleer privacy- en verwerkersafspraken en zet AI_PROCESSING_APPROVED op yes.');
+ assertAiAllowed();
  if(!process.env.OPENAI_API_KEY)throw Error('OPENAI_API_KEY ontbreekt.');
  const allowedIntake=Object.fromEntries(Object.entries(record.intake||{}).filter(([k])=>!['naam','email','ip','user_agent','referrer','bureau_beleid_bestand','intake_voorkeur','bot-field'].includes(k)));
  const data={task:kind,intake:allowedIntake,workplan:Object.fromEntries(fields.map(f=>[f,record[f]||''])),checks:(record.controlepunten||[]).map((text,index)=>({index,text,manuallyChecked:!!record.checked?.[index]})),previousQuestions:record.questionDraft?.questions||[],previousAnswers:record.answerLinks||[],feedback};

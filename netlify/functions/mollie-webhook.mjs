@@ -1,6 +1,6 @@
 import { sendCustomerMail } from './lib/customer-mail.mjs';
 import { buildTestInvoice } from './lib/invoice.mjs';
-import { getStore } from '@netlify/blobs';
+import {getAppStore} from './lib/environment.mjs';
 import { sanitize } from './lib/admin-core.mjs';
 import { mollieCall,verifyPayment,applyStatus } from './lib/mollie.mjs';
 async function notifyPaid(store, record, payment) {
@@ -11,7 +11,7 @@ async function notifyPaid(store, record, payment) {
  catch(error){console.error('Betaalbevestiging mislukt',error.message);}
 }
 const ok=new Response('OK',{status:200,headers:{'content-type':'text/plain','cache-control':'no-store'}});
-export function createWebhookHandler(storeFactory=()=>getStore({name:'opvangwerkplan-concepten',consistency:'strong'}),provider=mollieCall){
+export function createWebhookHandler(storeFactory=()=>getAppStore(),provider=mollieCall){
  return async req=>{
   if(req.method!=='POST')return new Response('Methode niet toegestaan',{status:405});
   try{

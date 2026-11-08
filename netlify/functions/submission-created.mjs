@@ -1,5 +1,6 @@
+import {backgroundUrl} from './lib/environment.mjs';
 import {packageFor} from './lib/packages.mjs';
-import { getStore } from "@netlify/blobs";
+import {getAppStore} from './lib/environment.mjs';
 import { randomUUID } from "node:crypto";
 
 function intakeHerkennen(data) {
@@ -18,7 +19,7 @@ function veiligeFoutmelding(error) {
 }
 
 async function dispatchNaarAchtergrond(data, id) {
-  const baseUrl = process.env.URL || process.env.DEPLOY_PRIME_URL;
+  const baseUrl = backgroundUrl('/');
   const token = process.env.ADMIN_TOKEN;
   if (!baseUrl) throw new Error("Netlify-site-URL ontbreekt");
   if (!token || token.length < 12) throw new Error("ADMIN_TOKEN ontbreekt of is te kort");
@@ -55,7 +56,7 @@ export default async (req) => {
     const pkg=packageFor(data.pakket);
     data.pakket=pkg.id;
     const id=randomUUID();
-    const store=getStore({name:"opvangwerkplan-concepten",consistency:"strong"});
+    const store=getAppStore();
     await store.setJSON(`jobs/${id}.json`,{id,createdAt:new Date().toISOString(),opvangnaam:data.opvangnaam||"",status:"wachtrij"});
     try {
       await dispatchNaarAchtergrond(data, id);
@@ -65,7 +66,7 @@ export default async (req) => {
       try {
 
         const createdAt = new Date().toISOString();
-        const store = getStore({ name: "opvangwerkplan-concepten", consistency: "strong" });
+        const store = getAppStore();
         await store.setJSON(`errors/${id}.json`, {
           id,
           createdAt,

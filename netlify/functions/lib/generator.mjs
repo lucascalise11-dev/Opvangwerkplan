@@ -1,3 +1,4 @@
+import {assertAiAllowed} from './environment.mjs';
 const SCHEMA = {
   type: "object",
   properties: {
@@ -46,12 +47,12 @@ async function callWithoutPolicyFile(apiKey, data) {
 }
 
 export async function generateWorkplan(apiKey, data) {
-  if(process.env.AI_PROCESSING_APPROVED!=="yes")throw Error("AI-verwerking nog niet vrijgegeven na privacy- en verwerkerscontrole.");
+  assertAiAllowed();
   if (!apiKey) throw new Error("OPENAI_API_KEY ontbreekt");
   const policyUrl = String(data.bureau_beleid_bestand || "").trim();
   let response = await callOpenAI(apiKey, data, policyUrl);
   if (!response.ok && policyUrl && [400,422].includes(response.status)) response = await callWithoutPolicyFile(apiKey, data);
-  if (!response.ok) throw new Error(`OpenAI generatie mislukt (${response.status}): ${await response.text()}`);
+  if (!response.ok) throw new Error(`OpenAI generatie mislukt (${response.status})`);
   const result = await response.json();
   if (result.status && result.status !== "completed") throw new Error(`OpenAI antwoord niet voltooid: ${result.status}`);
   const text = result.output_text || result.output?.flatMap(item => item.content || []).find(item => item.type === "output_text")?.text;

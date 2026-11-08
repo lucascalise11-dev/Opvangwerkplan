@@ -1,4 +1,5 @@
-import {getStore} from '@netlify/blobs';
+import {backgroundUrl,liveMailAllowed,aiPolicy} from './lib/environment.mjs';
+import {getAppStore} from './lib/environment.mjs';
 import {randomUUID} from 'node:crypto';
 import nodemailer from 'nodemailer';
 import {allowed} from './lib/admin-core.mjs';
@@ -7,9 +8,9 @@ import {buildConceptPdf} from './lib/pdf.mjs';
 import {buildWord} from './lib/word.mjs';
 const json=(v,status=200)=>Response.json(v,{status,headers:{'cache-control':'no-store'}});
 const uuid=s=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s||'');
-const mailReady=()=>process.env.MAIL_MODE==='live'&&!!process.env.GMAIL_APP_PASSWORD;
-export function createRevisionHandler(factory=()=>getStore({name:'opvangwerkplan-concepten',consistency:'strong'}),dispatch=async job=>{
- const origin=process.env.URL;if(!origin?.startsWith('https://'))throw Error('Veilige Netlify URL ontbreekt.');
+const mailReady=()=>liveMailAllowed()&&process.env.MAIL_MODE==='live'&&!!process.env.GMAIL_APP_PASSWORD;
+export function createRevisionHandler(factory=()=>getAppStore(),dispatch=async job=>{
+ const origin=backgroundUrl('/').href;if(!origin?.startsWith('https://'))throw Error('Veilige Netlify URL ontbreekt.');
  const r=await fetch(new URL('/.netlify/functions/revisie-worker',origin),{method:'POST',headers:{'content-type':'application/json','x-admin-token':process.env.ADMIN_TOKEN},body:JSON.stringify(job),signal:AbortSignal.timeout(8000)});if(!r.ok)throw Error('Achtergrondanalyse kon niet starten.');
 },send=async data=>{
  const client=nodemailer.createTransport({host:'smtp.gmail.com',port:465,secure:true,auth:{user:'opvangwerkplan@gmail.com',pass:process.env.GMAIL_APP_PASSWORD.replace(/\s/g,'')},connectionTimeout:10000,socketTimeout:20000});
@@ -34,7 +35,7 @@ export function createRevisionHandler(factory=()=>getStore({name:'opvangwerkplan
  if(b.version!==entry.etag)return json({error:'De aanvraag is gewijzigd. Open opnieuw voordat u doorgaat.'},409);
  let next={...r};
  if(['questions','analyse'].includes(b.action)){
-  if(process.env.AI_PROCESSING_APPROVED!=='yes'||!process.env.OPENAI_API_KEY)return json({error:'AI-verwerking niet ingesteld/vrijgegeven. Controleer de verwerkersafspraken, OPENAI_API_KEY en AI_PROCESSING_APPROVED=yes.'},409);
+  if(!aiPolicy()||!process.env.OPENAI_API_KEY)return json({error:'AI-verwerking niet ingesteld/vrijgegeven. Controleer de verwerkersafspraken en OPENAI_API_KEY. Productie vereist AI_PROCESSING_APPROVED=yes; test vereist AI_TEST_PROCESSING_APPROVED=yes.'},409);
   if(b.privacyConfirmed!==true)return json({error:'Controleer eerst dat de brontekst geen persoonsgegevens van kinderen bevat.'},400);
   const feedback=b.action==='analyse'?String(b.feedback||'').trim():String(r.clientFeedback||'');if(b.action==='analyse'&&(!feedback||feedback.length>100000))return json({error:'Plak klantfeedback van maximaal 100.000 tekens.'},400);
   if(r.reviewJob){const old=await store.get(`review-jobs/${id}/${r.reviewJob}.json`,{type:'json'});if(old?.status==='bezig'&&Date.now()-Date.parse(old.createdAt)<16*60*1000)return json({error:'Een analyse loopt al. Wacht tot deze klaar is.'},409);}

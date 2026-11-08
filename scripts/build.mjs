@@ -1,6 +1,9 @@
 import { cp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 const root=resolve(import.meta.dirname,".."),out=resolve(root,"dist");
+const context=process.env.CONTEXT||'local',id=process.env.DEPLOY_ID||'',url=process.env.DEPLOY_URL||'';
+if(context!=='local'&&(!/^[a-f0-9]{24}$/i.test(id)||!url.startsWith('https://'+id+'--')||!new URL(url).hostname.endsWith('.netlify.app')))throw Error('Geen betrouwbare deployment-identiteit. Build geblokkeerd.');
+await writeFile(resolve(root,'netlify/functions/lib/deployment-context.mjs'),'// Generated; do not edit. No secrets.\nexport const deployment=Object.freeze('+JSON.stringify({context,id,url})+');\n');
 const config=JSON.parse(await readFile(resolve(root,"site-config.json"),"utf8"));
 const required=["legalName","tradeName","address","kvk","vatId","email","phone","siteUrl"];
 const missing=required.filter(k=>!String(config[k]||"").trim());
@@ -13,6 +16,12 @@ const names=["index.html","bedankt.html","intake.html","intake-ontvangen.html","
 for(const name of names){
  if(name.endsWith(".html")){
  let html=await readFile(resolve(root,name),"utf8");
+ if(context!=='production'){
+ html=html.replace(/ data-netlify="true"/g,'').replace(/ netlify-honeypot="[^"]*"/g,'');
+ html=html.replace(/(<form[^>]*?)action="[^"]*"/g,'$1action="/.netlify/functions/test-intake"');
+ html=html.replace('<body>','<body><aside style="padding:14px;background:#fff3cf;color:#243025;border-bottom:2px solid #a45b36" role="note"><strong>TESTOMGEVING</strong> — alleen fictieve gegevens. Afzonderlijke testopslag; geen klantmail of echte betaling. Gebruik bij beleid de tekstvelden, geen bestanden.</aside>');
+ }
+
  html=html.replace(/\{\{(\w+)\}\}/g,(_,key)=>key==="draftNotice"?values[key]:escape(values[key]||(key==="kvk"?"Wordt aangevuld vóór opdrachtbevestiging":"Nog niet vastgesteld")));
  if(!config.launchReady&&!/name="robots"/.test(html))html=html.replace("</head>",'<meta name="robots" content="noindex,nofollow"></head>');
  if(config.launchReady&&["index.html","contact.html","privacy.html","voorwaarden.html"].includes(name)){
@@ -24,4 +33,4 @@ for(const name of names){
 }
 await writeFile(resolve(out,"robots.txt"),config.launchReady?"User-agent: *\nAllow: /\nDisallow: /admin.html\nDisallow: /.netlify/functions/\nDisallow: /lancering.html\nSitemap: "+config.siteUrl.replace(/\/$/,"")+"/sitemap.xml\n":"User-agent: *\nDisallow: /\n");
 if(config.launchReady)await writeFile(resolve(out,"sitemap.xml"),'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+["/","/contact.html","/privacy.html","/voorwaarden.html"].map(path=>"<url><loc>"+escape(config.siteUrl.replace(/\/$/,"")+path)+"</loc></url>").join("")+"</urlset>");
-console.log("v8 gebouwd: "+(config.launchReady?"lancering":"voorbereiding (niet geïndexeerd)"));
+console.log("v8.1 gebouwd: "+(config.launchReady?"lancering":"voorbereiding (niet geïndexeerd)"));
