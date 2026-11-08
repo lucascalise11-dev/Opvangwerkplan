@@ -1,6 +1,7 @@
+import {operation,remember} from './lib/operation.mjs';
 import {environmentInfo} from './lib/environment.mjs';
 import {issueReviewToken} from './lib/review-token.mjs';
-import {backgroundUrl,liveMailAllowed,aiPolicy} from './lib/environment.mjs';
+import {liveMailAllowed,aiPolicy} from './lib/environment.mjs';
 import {getAppStore} from './lib/environment.mjs';
 import {randomUUID} from 'node:crypto';
 import nodemailer from 'nodemailer';
@@ -11,10 +12,7 @@ import {buildWord} from './lib/word.mjs';
 const json=(v,status=200)=>Response.json(v,{status,headers:{'cache-control':'no-store'}});
 const uuid=s=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s||'');
 const mailReady=()=>liveMailAllowed()&&process.env.MAIL_MODE==='live'&&!!process.env.GMAIL_APP_PASSWORD;
-export function createRevisionHandler(factory=()=>getAppStore(),dispatch=async job=>{
- const origin=backgroundUrl('/').href;if(!origin?.startsWith('https://'))throw Error('Veilige Netlify URL ontbreekt.');
- const r=await fetch(new URL('/.netlify/functions/revisie-worker',origin),{method:'POST',headers:{'content-type':'application/json','x-admin-token':process.env.ADMIN_TOKEN},body:JSON.stringify(job),signal:AbortSignal.timeout(8000)});if(!r.ok)throw Error('Achtergrondanalyse kon niet starten.');
-},send=async data=>{
+export function createRevisionHandler(factory=()=>getAppStore(),_legacyDispatch=null,send=async data=>{
  const client=nodemailer.createTransport({host:'smtp.gmail.com',port:465,secure:true,auth:{user:'opvangwerkplan@gmail.com',pass:process.env.GMAIL_APP_PASSWORD.replace(/\s/g,'')},connectionTimeout:10000,socketTimeout:20000});
  const info=await client.sendMail({from:{name:'OpvangWerkPlan',address:'opvangwerkplan@gmail.com'},replyTo:'opvangwerkplan@gmail.com',...data,disableFileAccess:true,disableUrlAccess:true});
  if(!info.accepted?.length)throw Error('Niet door SMTP geaccepteerd.');
@@ -34,6 +32,7 @@ export function createRevisionHandler(factory=()=>getAppStore(),dispatch=async j
  if(!req.headers.get('content-type')?.includes('application/json'))return json({error:'JSON vereist.'},415);
  const raw=await req.text();if(raw.length>180000)return json({error:'Te veel tekst. Maximaal 180.000 tekens per verzoek.'},413);
  let b;try{b=JSON.parse(raw);}catch{return json({error:'Ongeldige JSON.'},400);}
+ const op=operation(b,r);if(op?.replayed)return json({record:r,version:entry.etag,replayed:true});
  if(b.version!==entry.etag)return json({error:'De aanvraag is gewijzigd. Open opnieuw voordat u doorgaat.'},409);
  let next={...r};
  if(['questions','analyse'].includes(b.action)){
@@ -41,7 +40,7 @@ export function createRevisionHandler(factory=()=>getAppStore(),dispatch=async j
   if(b.privacyConfirmed!==true)return json({error:'Controleer eerst dat de brontekst geen persoonsgegevens van kinderen bevat.'},400);
   const feedback=b.action==='analyse'?String(b.feedback||'').trim():String(r.clientFeedback||'');if(b.action==='analyse'&&(!feedback||feedback.length>100000))return json({error:'Plak klantfeedback van maximaal 100.000 tekens.'},400);
   if(r.reviewJob){const old=await store.get(`review-jobs/${id}/${r.reviewJob}.json`,{type:'json'});if(['bezig','wachtrij'].includes(old?.status)&&Date.now()-Date.parse(old.createdAt)<16*60*1000){
-   if(!environmentInfo().production&&old.version===entry.etag&&old.kind===(b.action==='questions'?'questions':'corrections')&&(b.action==='questions'||feedback===r.clientFeedback)){
+   if(old.version===entry.etag&&old.kind===(b.action==='questions'?'questions':'corrections')&&(b.action==='questions'||feedback===r.clientFeedback)){
     const task={id,jobId:old.jobId,version:old.version,kind:old.kind};
     return json({jobId:old.jobId,version:entry.etag,task,taskToken:issueReviewToken(task),worker:'/.netlify/functions/revisie-worker',resumed:true},202);
    }
@@ -51,11 +50,9 @@ export function createRevisionHandler(factory=()=>getAppStore(),dispatch=async j
   const saved=await store.setJSON(key,next,{onlyIfMatch:entry.etag});if(!saved.modified)return json({error:'Gewijzigd; laad opnieuw.'},409);
   const task={id,jobId,version:saved.etag,kind:b.action==='questions'?'questions':'corrections'};
   await store.setJSON(`review-jobs/${id}/${jobId}.json`,{...task,recordId:id,status:'wachtrij',createdAt:new Date().toISOString()},{onlyIfNew:true});
-  if(!environmentInfo().production){
+  {
    return json({jobId,version:saved.etag,task,taskToken:issueReviewToken(task),worker:'/.netlify/functions/revisie-worker'},202);
   }
-  try{await dispatch(task);}catch{await store.setJSON(`review-jobs/${id}/${jobId}.json`,{status:'fout',error:'Starten niet bevestigd. Controleer de functielog voordat u opnieuw analyseert.'});return json({error:'Starten van de achtergrondanalyse is niet bevestigd.'},503);}
-  return json({jobId,version:saved.etag},202);
  }else if(b.action==='saveMail'){
   if(!r.questionDraft)return json({error:'Genereer eerst een e-mail.'},409);
   if(typeof b.text!=='string'||b.text.length>30000||!b.text.trim())return json({error:'Ongeldige e-mailtekst.'},400);
@@ -81,6 +78,7 @@ export function createRevisionHandler(factory=()=>getAppStore(),dispatch=async j
   if(!['bureau',undefined].includes(r.packageId)&&r.intake?.pakket!=='bureau')return json({error:'Alleen voor bureauoffertes.'},400);
   if(!Number.isInteger(b.limit)||b.limit<0||b.limit>100||!String(b.agreement||'').trim())return json({error:'Vul het aantal rondes en de offerteafspraak in.'},400);next.packageId='bureau';next.bureauCorrectionLimit=b.limit;next.bureauAgreement=String(b.agreement).slice(0,2000);
  }else return json({error:'Onbekende actie.'},400);
+ next=remember(next,op);
  const saved=await store.setJSON(key,next,{onlyIfMatch:entry.etag});if(!saved.modified)return json({error:'Gelijktijdige wijziging. Open de nieuwste versie; correctieronde niet verwerkt.'},409);
  return json({record:next,version:saved.etag});
  }catch{return json({error:'De bewerking is niet gelukt. Controleer de instellingen of probeer opnieuw na herladen.'},500);}

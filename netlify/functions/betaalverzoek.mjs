@@ -19,14 +19,15 @@ export function createPaymentHandler(storeFactory=()=>getAppStore(),provider=mol
    const record=entry.data;
    if(record.packageId==='bureau'||record.intake?.pakket==='bureau')return response({error:'Bureauofferte vereist een afzonderlijk overeengekomen betaalbedrag.'},409);
    const price=recordPackage(record).amount;
-   if(!canFinalize(record)||!record.finalPdfKey||record.archived)return response({error:'Controleer de tekst en het klantakkoord, maak een definitieve PDF en sla de aanvraag op voordat u een betaalverzoek maakt.'},409);
+   if(input.action==='status'&&!record.mollie?.id)return response({error:'Er is nog geen betaalverzoek voor deze aanvraag. Maak eerst bewust een betaallink.'},409);
+   if(!canFinalize(record)||record.archived)return response({error:'Leg eerst uw inhoudelijke controle en het klantakkoord vast voordat u een betaalverzoek maakt.'},409);
    if(record.mollie?.id){
     const latest=await provider(record.mollie.mode,record.mollie.id);
     if(!verifyPayment(latest,id,record.mollie.id,record.mollie.mode,record.mollie.amount||price))throw Error('De betaalgegevens van Mollie komen niet overeen.');
     const synced=applyStatus(record,latest);
-    if(['open','pending','authorized','paid'].includes(latest.status)&&synced.payment!=='onbetaald'){
+    if(input.action==='status'||(['open','pending','authorized','paid'].includes(latest.status)&&synced.payment!=='onbetaald')){
      if(latest.status!==record.mollie.status||synced.payment!==record.payment){const update=await store.setJSON(key,synced,{onlyIfMatch:entry.etag});if(!update.modified)return response({error:'Aanvraag intussen gewijzigd. Laad opnieuw.'},409);}
-     return response({id:latest.id,mode:record.mollie.mode,status:latest.status,checkoutUrl:synced.payment==='betaald'?null:latest._links?.checkout?.href||record.mollie.checkoutUrl});
+     return response({id:latest.id,mode:record.mollie.mode,status:latest.status,checkoutUrl:['failed','canceled','expired'].includes(latest.status)||synced.payment==='betaald'?null:latest._links?.checkout?.href||record.mollie.checkoutUrl});
     }
    }
    if(record.payment==='betaald')return response({error:'Deze aanvraag is al als betaald vastgelegd.'},409);

@@ -12,7 +12,7 @@ if(config.launchReady&&!/^https:\/\/[^/]+\/?$/.test(config.siteUrl))throw Error(
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const values={...config,draftNotice:config.launchReady?"":'<p class="notice">Voorbereidingsversie: bedrijfsgegevens en afspraken worden vóór de commerciële lancering definitief gemaakt.</p>'};
 await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});
-const names=["index.html","bedankt.html","intake.html","intake-ontvangen.html","admin.html","contact.html","privacy.html","voorwaarden.html","lancering.html","404.html","betaling-terug.html","admin.js","intake.js","lancering.js","legal.css","favicon.svg","luca-scalise.jpg","voorbeeld-werkplan.pdf","update.css","hero-opvang.jpg","_headers","_redirects"];
+const names=["index.html","bedankt.html","intake.html","intake-ontvangen.html","admin.html","contact.html","privacy.html","voorwaarden.html","lancering.html","404.html","betaling-terug.html","admin.js","intake.js","lancering.js","legal.css","favicon.svg","luca-scalise.jpg","voorbeeld-werkplan.pdf","update.css","dashboard.js","dashboard.css","hero-opvang.jpg","_headers","_redirects"];
 for(const name of names){
  if(name.endsWith(".html")){
  let html=await readFile(resolve(root,name),"utf8");
@@ -33,4 +33,4 @@ for(const name of names){
 }
 await writeFile(resolve(out,"robots.txt"),config.launchReady?"User-agent: *\nAllow: /\nDisallow: /admin.html\nDisallow: /.netlify/functions/\nDisallow: /lancering.html\nSitemap: "+config.siteUrl.replace(/\/$/,"")+"/sitemap.xml\n":"User-agent: *\nDisallow: /\n");
 if(config.launchReady)await writeFile(resolve(out,"sitemap.xml"),'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+["/","/contact.html","/privacy.html","/voorwaarden.html"].map(path=>"<url><loc>"+escape(config.siteUrl.replace(/\/$/,"")+path)+"</loc></url>").join("")+"</urlset>");
-console.log("v8.3 gebouwd: "+(config.launchReady?"lancering":"voorbereiding (niet geïndexeerd)"));
+console.log("v8.4 gebouwd: "+(config.launchReady?"lancering":"voorbereiding (niet geïndexeerd)"));

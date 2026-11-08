@@ -9,14 +9,15 @@ export function createWorker(factory=()=>getAppStore(),analyse=analyseRecord){re
  if(req.method!=='POST')return new Response('Methode niet toegestaan',{status:405});
  let b;try{const raw=await req.text();if(raw.length>6000)return new Response('Te groot',{status:413});b=JSON.parse(raw);}catch{return new Response('Ongeldige gegevens',{status:400});}
  const production=environmentInfo().production;
- if(production?!allowed(req):!verifyReviewToken(b,b.taskToken)){
+ const scoped=verifyReviewToken(b,b.taskToken);
+ if(!scoped&&!(production&&allowed(req))){
   console.warn('REVIEW_AUTH_REJECTED');
   return Response.json({error:'Workerautorisatie ontbreekt, is verlopen of hoort niet bij deze taak.',code:'REVIEW_AUTH_REJECTED'},{status:401});
  }
 if(!/^[0-9a-f-]{36}$/i.test(b.id||'')||!/^[0-9a-f-]{36}$/i.test(b.jobId||'')||!['questions','corrections'].includes(b.kind))return new Response('Ongeldig',{status:400});
  const store=factory(),jobKey=`review-jobs/${b.id}/${b.jobId}.json`,key=`records/${b.id}.json`;
  const task=await store.get(jobKey,{type:'json'});
- if(!production&&(!task||task.id!==b.id||task.jobId!==b.jobId||task.version!==b.version||task.kind!==b.kind))return Response.json({error:'Taak hoort niet bij deze aanvraag.'},{status:409});
+ if(scoped&&(!task||task.id!==b.id||task.jobId!==b.jobId||task.version!==b.version||task.kind!==b.kind))return Response.json({error:'Taak hoort niet bij deze aanvraag.'},{status:409});
  const claim=await store.setJSON(`review-claims/${b.id}/${b.jobId}.json`,{at:new Date().toISOString()},{onlyIfNew:true});if(!claim.modified)return;
  try{
  const entry=await store.getWithMetadata(key,{type:'json'});if(!entry||entry.etag!==b.version||entry.data.reviewJob!==b.jobId)throw Error('changed');

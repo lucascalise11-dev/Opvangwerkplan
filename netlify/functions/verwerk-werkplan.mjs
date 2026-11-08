@@ -46,10 +46,13 @@ export default async (req) => {
     return;
   }
 
+  return processIntake(data,requestedId);
+};
+
+// Shared processing: the signed Netlify form event calls this directly, without HTTP.
+export async function processIntake(data,requestedId,store=getAppStore()){
   const id = /^[0-9a-f-]{36}$/i.test(requestedId||"") ? requestedId : randomUUID();
   const createdAt = new Date().toISOString();
-  const store = getAppStore();
-
   const claim=await store.setJSON(`claims/${id}.json`,{createdAt},{onlyIfNew:true});
   if(!claim.modified) return;
   try {
@@ -106,4 +109,4 @@ export default async (req) => {
       console.error("Generatiefout kon niet in Blobs worden opgeslagen", veiligeFoutmelding(storageError));
     }
   }
-};
+}

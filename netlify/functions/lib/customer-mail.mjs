@@ -28,7 +28,8 @@ export async function sendCustomerMail(store,key,kind,data,attachments=[],transp
  try{
   const content=mailTemplate(kind,data);
   if(isTest){content.subject='[TEST] '+content.subject;content.text='TESTBERICHT — alleen voor de beheerder.\n\n'+content.text;content.html=content.html.replace('<body ', '<body ').replace('<h1 ', '<p style="color:#a45b36;font-weight:bold">TESTBERICHT — alleen voor de beheerder</p><h1 ');}
-  await client.sendMail({from:{name:'Opvangwerkplan',address:CONTACT},replyTo:CONTACT,to,...content,attachments,disableFileAccess:true,disableUrlAccess:true});
+  const sent=await client.sendMail({from:{name:'Opvangwerkplan',address:CONTACT},replyTo:CONTACT,to,...content,attachments,disableFileAccess:true,disableUrlAccess:true});
+  if(!sent?.accepted?.length)throw Error('SMTP heeft geen ontvanger geaccepteerd.');
   await store.setJSON(claimKey,{status:'sent',kind,at:new Date().toISOString()});
   return {status:'sent'};
  }catch(error){
