@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const fieldNames={opvangnaam:'Naam van de opvang',plaats:'Plaats',opvang:'Over de opvang',werkwijze:'Werkwijze en wennen',activiteiten:'Activiteiten en speelmaterialen',speelruimte:'Binnen- en buitenspeelruimte',emotionele_veiligheid:'Emotionele veiligheid',persoonlijke_competenties:'Persoonlijke competenties',sociale_competenties:'Sociale competenties',normen_waarden:'Normen en waarden',ontwikkeling:'Ontwikkeling volgen',bureau_beleid:'Beleid van het gastouderbureau',actualiseren:'Actueel houden'};
-let token='', data={},current=null,version='',dirty=false,busy=false;
+let token='', data={},current=null,version='',dirty=false,busy=false,pendingReview=null;
 sessionStorage.removeItem('owp-admin');
 function msg(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
 async function api(path='',body){
@@ -79,7 +79,7 @@ $('open').onclick=()=>run(async()=>{token=$('token').value;await load();$('token
 $('token').onkeydown=e=>{if(e.key==='Enter')$('open').click();};
 $('refresh').onclick=()=>run(load);$('search').oninput=render;$('filter').onchange=render;
 $('back').onclick=()=>run(async()=>{if(dirty&&!confirm('Niet-opgeslagen wijzigingen verlaten?'))return;dirty=false;await load();});
-$('logout').onclick=()=>{token='';current=null;data={};dirty=false;$('login').classList.remove('hidden');$('panel').classList.add('hidden');$('editor').classList.add('hidden');$('list').replaceChildren();$('text-fields').replaceChildren();$('intake-view').replaceChildren();$('failures').replaceChildren();msg('Uitgelogd.');};
+$('logout').onclick=()=>{pendingReview=null;token='';current=null;data={};dirty=false;$('login').classList.remove('hidden');$('panel').classList.add('hidden');$('editor').classList.add('hidden');$('list').replaceChildren();$('text-fields').replaceChildren();$('intake-view').replaceChildren();$('failures').replaceChildren();msg('Uitgelogd.');};
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 
 async function revisionCall(action,extra={}){
@@ -98,9 +98,27 @@ function renderRevisions(){
  $('bureau-rounds').value=r.bureauCorrectionLimit??'';$('bureau-agreement').value=r.bureauAgreement||'';
  $('version-history').replaceChildren();for(const v of [...(r.versionHistory||[])].reverse()){const box=node('article');box.append(node('strong','Versie '+v.number+' · '+new Date(v.at).toLocaleString('nl-NL')),node('p',v.reason));for(const format of ['pdf','docx'])box.append(button('Download '+format.toUpperCase(),async()=>{const response=await fetch('/.netlify/functions/revisies?id='+current.id+'&versionKey='+encodeURIComponent(v.key)+'&format='+format,{headers:{'x-admin-token':token}});if(!response.ok)throw Error('Versie kon niet worden geladen.');downloadBlob(await response.blob(),'versie-'+v.number+'.'+format);}));$('version-history').append(box);}
 }
-async function startReview(action){savedOnly();const id=current.id;const result=await revisionCall(action,{privacyConfirmed:$('review-privacy').checked,feedback:$('customer-feedback').value});version=result.version;$('review-progress').textContent='Analyse op de achtergrond gestart. Laat dit venster open; de aanvraag wordt veilig opgeslagen.';
- for(let i=0;i<180;i++){await new Promise(r=>setTimeout(r,2500));if(!current||current.id!==id)return;const response=await fetch('/.netlify/functions/revisies?id='+id+'&job='+result.jobId,{headers:{'x-admin-token':token}});if(!response.ok)throw Error('Taakstatus niet bereikbaar. Heropen de aanvraag.');const job=await response.json();if(job.status==='fout')throw Error(job.error);if(job.status==='gereed'){await openRecord(id);$('review-progress').textContent='Analyse gereed. Controleer de voorstellen; er is niets automatisch toegepast.';return;}}
- throw Error('De analyse duurt langer dan verwacht. Heropen de aanvraag; start niet direct nogmaals.');
+async function startReview(action){
+ savedOnly();const id=current.id;
+ if(pendingReview&&pendingReview.id!==id)pendingReview=null;
+ let result=pendingReview?.result;
+ if(result&&pendingReview.action!==action)throw Error('Er loopt al een analyse. Controleer eerst de status van die taak.');
+ if(!result){result=await revisionCall(action,{privacyConfirmed:$('review-privacy').checked,feedback:$('customer-feedback').value});version=result.version;pendingReview={id,action,result,started:false};}
+ if(result.worker&&!pendingReview.started){
+  const started=await fetch('/.netlify/functions/revisie-worker',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({...result.task,taskToken:result.taskToken})});
+  if(started.status!==202)throw Error('De analysetaak is opgeslagen, maar starten is geblokkeerd (HTTP '+started.status+'). Bij 401: open de preview via Netlify en meld u opnieuw aan. Klik daarna nogmaals op dezelfde analyseknop; er wordt geen nieuwe taak aangemaakt.');
+  pendingReview.started=true;
+ }
+ $('review-progress').textContent='Analyse op de achtergrond gestart. Laat dit venster open. Taak: '+result.jobId;
+ for(let i=0;i<180;i++){
+  await new Promise(r=>setTimeout(r,2500));if(!current||current.id!==id)return;
+  const response=await fetch('/.netlify/functions/revisies?id='+id+'&job='+result.jobId,{credentials:'same-origin',headers:{'x-admin-token':token}});
+  if(!response.ok)throw Error('Taakstatus niet bereikbaar (HTTP '+response.status+'). Klik opnieuw op dezelfde analyseknop om deze taak te controleren.');
+  const job=await response.json();
+  if(job.status==='fout'){pendingReview=null;await openRecord(id);throw Error(job.error);}
+  if(job.status==='gereed'){pendingReview=null;await openRecord(id);$('review-progress').textContent='Analyse gereed. Controleer de voorstellen; er is niets automatisch toegepast.';return;}
+ }
+ throw Error('De analyse duurt langer dan verwacht. Klik opnieuw op dezelfde analyseknop voor deze taak of heropen de aanvraag.');
 }
 $('questions-generate').onclick=()=>run(()=>startReview('questions'));
 $('analyse-corrections').onclick=()=>run(()=>startReview('analyse'));

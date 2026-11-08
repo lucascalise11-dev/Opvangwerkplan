@@ -21,7 +21,7 @@ const handler=createRevisionHandler(()=>store,async b=>{job=b;});
 const req=(action,extra={},token=process.env.ADMIN_TOKEN)=>new Request('https://example.test/api?id='+id,{method:'POST',headers:{'x-admin-token':token,'content-type':'application/json'},body:JSON.stringify({action,version:db.get('records/'+id+'.json').etag,...extra})});
 assert.equal((await handler(req('analyse',{feedback,privacyConfirmed:true},'wrong'))).status,401);
 assert.equal((await handler(req('analyse',{feedback,privacyConfirmed:false}))).status,400);
-let response=await handler(req('analyse',{feedback,privacyConfirmed:true}));assert.equal(response.status,202);assert(job);
+let response=await handler(req('analyse',{feedback,privacyConfirmed:true}));assert.equal(response.status,202);const start=await response.json();job={...start.task,taskToken:start.taskToken};assert(job);
 const worker=createWorker(()=>store,async(r,f)=>{assert.equal(r.id,id);assert.equal(f,feedback);return structuredClone(result);});
 await worker(new Request('https://example.test/worker',{method:'POST',headers:{'x-admin-token':process.env.ADMIN_TOKEN},body:JSON.stringify(job)}));
 let saved=await store.get('records/'+id+'.json');assert.equal(saved.workflowStatus,'Correcties ter goedkeuring');assert.equal(saved.correctionsUsed,undefined);

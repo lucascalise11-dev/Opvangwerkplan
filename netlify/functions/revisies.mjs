@@ -1,3 +1,5 @@
+import {environmentInfo} from './lib/environment.mjs';
+import {issueReviewToken} from './lib/review-token.mjs';
 import {backgroundUrl,liveMailAllowed,aiPolicy} from './lib/environment.mjs';
 import {getAppStore} from './lib/environment.mjs';
 import {randomUUID} from 'node:crypto';
@@ -38,11 +40,21 @@ export function createRevisionHandler(factory=()=>getAppStore(),dispatch=async j
   if(!aiPolicy()||!process.env.OPENAI_API_KEY)return json({error:'AI-verwerking niet ingesteld/vrijgegeven. Controleer de verwerkersafspraken en OPENAI_API_KEY. Productie vereist AI_PROCESSING_APPROVED=yes; test vereist AI_TEST_PROCESSING_APPROVED=yes.'},409);
   if(b.privacyConfirmed!==true)return json({error:'Controleer eerst dat de brontekst geen persoonsgegevens van kinderen bevat.'},400);
   const feedback=b.action==='analyse'?String(b.feedback||'').trim():String(r.clientFeedback||'');if(b.action==='analyse'&&(!feedback||feedback.length>100000))return json({error:'Plak klantfeedback van maximaal 100.000 tekens.'},400);
-  if(r.reviewJob){const old=await store.get(`review-jobs/${id}/${r.reviewJob}.json`,{type:'json'});if(old?.status==='bezig'&&Date.now()-Date.parse(old.createdAt)<16*60*1000)return json({error:'Een analyse loopt al. Wacht tot deze klaar is.'},409);}
+  if(r.reviewJob){const old=await store.get(`review-jobs/${id}/${r.reviewJob}.json`,{type:'json'});if(['bezig','wachtrij'].includes(old?.status)&&Date.now()-Date.parse(old.createdAt)<16*60*1000){
+   if(!environmentInfo().production&&old.version===entry.etag&&old.kind===(b.action==='questions'?'questions':'corrections')&&(b.action==='questions'||feedback===r.clientFeedback)){
+    const task={id,jobId:old.jobId,version:old.version,kind:old.kind};
+    return json({jobId:old.jobId,version:entry.etag,task,taskToken:issueReviewToken(task),worker:'/.netlify/functions/revisie-worker',resumed:true},202);
+   }
+   return json({error:'Een analyse loopt al. Wacht tot deze klaar is.'},409);
+  }}
   const jobId=randomUUID();next.reviewJob=jobId;if(b.action==='analyse'){next.clientFeedback=feedback;next.workflowStatus='Correcties ontvangen';}
   const saved=await store.setJSON(key,next,{onlyIfMatch:entry.etag});if(!saved.modified)return json({error:'Gewijzigd; laad opnieuw.'},409);
-  await store.setJSON(`review-jobs/${id}/${jobId}.json`,{id:jobId,recordId:id,status:'bezig',createdAt:new Date().toISOString()},{onlyIfNew:true});
-  try{await dispatch({id,jobId,version:saved.etag,kind:b.action==='questions'?'questions':'corrections'});}catch{await store.setJSON(`review-jobs/${id}/${jobId}.json`,{status:'fout',error:'Starten niet bevestigd. Controleer de functielog voordat u opnieuw analyseert.'});return json({error:'Starten van de achtergrondanalyse is niet bevestigd.'},503);}
+  const task={id,jobId,version:saved.etag,kind:b.action==='questions'?'questions':'corrections'};
+  await store.setJSON(`review-jobs/${id}/${jobId}.json`,{...task,recordId:id,status:'wachtrij',createdAt:new Date().toISOString()},{onlyIfNew:true});
+  if(!environmentInfo().production){
+   return json({jobId,version:saved.etag,task,taskToken:issueReviewToken(task),worker:'/.netlify/functions/revisie-worker'},202);
+  }
+  try{await dispatch(task);}catch{await store.setJSON(`review-jobs/${id}/${jobId}.json`,{status:'fout',error:'Starten niet bevestigd. Controleer de functielog voordat u opnieuw analyseert.'});return json({error:'Starten van de achtergrondanalyse is niet bevestigd.'},503);}
   return json({jobId,version:saved.etag},202);
  }else if(b.action==='saveMail'){
   if(!r.questionDraft)return json({error:'Genereer eerst een e-mail.'},409);

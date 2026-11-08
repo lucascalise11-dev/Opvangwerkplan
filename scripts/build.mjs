@@ -33,4 +33,4 @@ for(const name of names){
 }
 await writeFile(resolve(out,"robots.txt"),config.launchReady?"User-agent: *\nAllow: /\nDisallow: /admin.html\nDisallow: /.netlify/functions/\nDisallow: /lancering.html\nSitemap: "+config.siteUrl.replace(/\/$/,"")+"/sitemap.xml\n":"User-agent: *\nDisallow: /\n");
 if(config.launchReady)await writeFile(resolve(out,"sitemap.xml"),'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+["/","/contact.html","/privacy.html","/voorwaarden.html"].map(path=>"<url><loc>"+escape(config.siteUrl.replace(/\/$/,"")+path)+"</loc></url>").join("")+"</urlset>");
-console.log("v8.2 gebouwd: "+(config.launchReady?"lancering":"voorbereiding (niet geïndexeerd)"));
+console.log("v8.3 gebouwd: "+(config.launchReady?"lancering":"voorbereiding (niet geïndexeerd)"));
