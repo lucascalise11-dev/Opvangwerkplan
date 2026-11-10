@@ -1,34 +1,69 @@
-OPVANGWERKPLAN v6.3 — e-mail en factuuropmaak
+ZAKELIJKE E-MAIL — VIMEXX — 10 november 2026
 
-Wat werkt na koppeling:
-- Intakebevestiging vanuit opvangwerkplan@gmail.com zodra de achtergrondverwerking begint.
-- Betaalbevestiging na door Mollie gecontroleerde betaling via de webhook.
-- Bij Mollie-testbetalingen: uitsluitend naar de beheerder, met TEST in onderwerp en een PDF-testfactuur.
-- Herhaalde webhookaanroepen versturen niet opnieuw dezelfde bevestiging.
-- Mailfouten stoppen de generatie en betaalregistratie niet.
+NETLIFY ENVIRONMENT VARIABLES — Production / Functions
+SMTP_HOST = web0175.zxcs.nl
+SMTP_PORT = 465
+SMTP_USER = info@opvangwerkplan.nl
+SMTP_PASSWORD = het exacte mailboxwachtwoord; Contains secret values aanvinken.
+MAIL_MODE = live
+Geen aanhalingstekens toevoegen. Geen Google-appwachtwoord gebruiken.
+TLS/certificaatcontrole is vast ingeschakeld; minimaal TLS 1.2. Geen SMTP_SECURE nodig.
+Geen SMTP_PASSWORD voor previews/branch deploys/local development instellen.
+Tests blijven geblokkeerd voor echte mail, ook bij geërfde live-instellingen.
+MAIL_MODE=off blokkeert mail; test stuurt intake/betaalbevestigingen alleen naar info.
+Klantvragen versturen vereist live en volledige SMTP-configuratie.
+GMAIL_APP_PASSWORD wordt niet meer gebruikt. Verwijder de variabele en trek het Google-
+appwachtwoord pas na geslaagde overstap in. Houd rekening met code-rollback.
 
-INSTELLEN
-1. Open Google-account opvangwerkplan@gmail.com en activeer tweestapsverificatie.
-2. Maak op https://myaccount.google.com/apppasswords een app-wachtwoord voor Opvangwerkplan.
-3. Plaats dit uitsluitend in Netlify Environment variables als GMAIL_APP_PASSWORD (Functions / Production).
-   Gebruik nooit je gewone Gmail-wachtwoord. Deel het app-wachtwoord niet in chat of GitHub.
-4. Voeg MAIL_MODE toe met waarde test. In deze stand ontvangt alleen opvangwerkplan@gmail.com berichten.
-5. Upload de gewijzigde v6.3-projectbestanden naar dezelfde GitHub-repository en commit.
-   Geen node_modules, geheimen of zipbestand uploaden; behoud netlify/functions/submission-created.mjs.
-6. Wacht op Published. Verstuur één testintake en controleer Gmail (ook spam).
-7. Test daarna een Mollie-testbetaling. Die blijft ook met MAIL_MODE=live naar de beheerder gaan.
-8. Na geslaagde verzendtest: zet MAIL_MODE op live en deploy opnieuw voor echte intakebevestigingen.
+PUBLICATIE
+Bewaar huidige productiecommit, deploy-ID en buildinstellingen.
+Gebruik de bestaande GitHub/Netlify-build, niet Netlify Drop: functies moeten gebouwd worden.
+Als package.json/index.html in de repository-root staan: upload de INHOUD van broncode/;
+base leeg, build npm run build, publish dist, functions netlify/functions.
+Als de repository al broncode/ bevat: vervang die map en behoud base=broncode.
+Behoud uw actuele productie-vrijgavewaarden in site-config.json: de lokale basis heeft
+launchReady=false en open controlevlaggen. Neem deze niet blind over uit de ZIP.
+Vergelijk met de huidige productiecommit vóór publicatie; uw actuele GitHub en accountinstellingen
+zijn niet ingezien. Mail- en privacyreparaties zitten in dezelfde bronset.
+Laat na env-wijzigingen een echte productiebuild maken. Promoveer geen testpreview:
+die gebruikt testopslag. Wij hebben niets gepubliceerd en geen klantgegevens gewijzigd.
 
-Voorbeelden staan in voorbeelden/: intakebevestiging.html, betaalbevestiging.html, testfactuur.pdf.
-De voorbeeldenmap wordt niet naar de publieke website gekopieerd.
+ECHTE VERZEND- EN ONTVANGSTCONTROLE
+1. Stuur vanuit een externe mailbox naar info@opvangwerkplan.nl. Controleer ontvangst in
+   Roundcube; antwoord en controleer ontvangst in de externe inbox.
+2. Dien één fictieve Bij Abuela-intake in met uw eigen externe e-mailadres. Controleer
+   registratie en bevestiging. From en Reply-To zijn info@opvangwerkplan.nl; live geen TEST.
+   Antwoord op de bevestiging en controleer ontvangst in Roundcube.
+3. Genereer en controleer klantvragen voor die fictieve aanvraag. Verstuur na expliciete
+   bevestiging naar hetzelfde eigen adres; controleer ontvangst en de mailregistratie.
+4. Bekijk de ontvangen headers: SPF, DKIM, DMARC en spammap. SMTP accepted/status sent bewijst
+   serveracceptatie, niet inboxaflevering. SMTP slaat app-mail niet automatisch op in Roundcube
+   Verzonden. Controleer ontvangst/registraties en zo nodig Vimexx-logs; niet blind herhalen.
+5. Netlify Forms-meldingen: open de betreffende formulieren en Notifications / Form notifications
+   (eventueel Project configuration > Notifications > Form submission notifications).
+   Vervang elke oude Gmail-ontvanger door info@opvangwerkplan.nl voor intake en contact/offerte
+   voor zover ingesteld. Deze accountinstellingen staan niet in de broncode.
+   Controleer één echte formuliermelding in Roundcube; dit staat los van de SMTP-bevestiging.
+6. Controleer oude Gmail-forwarding, afwezigheidsbericht en mailprogramma's. Geen onbedoelde
+   automatische kopieën naar Gmail. Verwijder geen oude mails tijdens de overstap.
 
-NOG OPEN VOOR ECHTE FACTUREN
-De PDF is een ontwerp/testfactuur, geen fiscale factuur. Het voorbeeld gebruikt ter illustratie 21% btw.
-Vóór echte facturatie: btw-behandeling vaststellen, bedrijfs-/klantfactuurgegevens vastleggen,
-KvK en btw-id invullen en een blijvende, unieke factuurnummerreeks implementeren.
-Live betaalbevestigingen hebben daarom voorlopig GEEN factuurbijlage.
+PRIVACY
+Bewaar de Vimexx-DPA met de orderbevestiging van Webhosting Basic. Artikel 1 maakt haar
+onderdeel van de overeenkomst. De individuele accountdocumenten zijn niet ingezien.
+Bronnen gecontroleerd 10 november 2026:
+https://www.vimexx.nl/help/email-instellingen-imap-pop3-smtp
+https://www.vimexx.nl/Verwerkersovereenkomst-Vimexx-14-05-2018.pdf
+https://www.vimexx.nl/news/update-aan-onze-algemene-voorwaarden-vanwege-avg
+Gmail staat alleen als historische correspondentie in de privacyverklaring. Beide mailboxen,
+bijlagen en kopieën blijven onder de bewaartermijnen en verwijderprocedure in LANCERING.md vallen.
+De vorige technische privacyreparatie blijft inbegrepen: intake-allowlist bij AI-correcties,
+geen willekeurige extra/nested velden/contactvelden/bijlage-URL, store:false en opslagisolatie.
+Vrije tekst en documenten worden niet betrouwbaar automatisch geanonimiseerd: controle op
+onnodige persoonsgegevens van kinderen blijft nodig. Geen garantie dat een DPA alle risico's oplost.
 
-Mailstatus staat in Netlify Blobs onder mail/. Bij needs-review: controleer eerst Verzonden in Gmail.
-Een onzekere SMTP-uitkomst wordt niet automatisch herhaald om dubbele mails te voorkomen.
-Er is nog geen automatische mailherstelknop. Oude inzendingen krijgen niet met terugwerkende kracht mail.
-Gmail kan serververzending blokkeren of begrenzen; de lokale tests vervangen geen echte verzendtest.
+BEHOUDEN
+Intakebevestiging, klantvragen, betaalbevestiging en dubbele-verzendingbeveiliging blijven werken
+volgens hun bestaande afhandeling. Onzekere SMTP-uitkomst blijft needs-review; geen automatische
+herhaling. Oude foutregistraties worden niet met terugwerkende kracht verstuurd.
+Bestaande betalingen/hosting/DNS/opslag/dashboard zijn niet aangepast.
+De testfactuur is geen fiscale factuur; echte facturatie blijft ongewijzigd en apart te regelen.
